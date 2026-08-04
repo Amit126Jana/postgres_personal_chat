@@ -21,7 +21,7 @@ const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ||
   (import.meta.env.DEV
     ? "http://localhost:4000"
-    : "personalchat-production-458f.up.railway.app");
+    : "https://personal-chat-rebx.onrender.com");
 
 const ICE_SERVERS = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
