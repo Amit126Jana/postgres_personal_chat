@@ -1768,6 +1768,13 @@ label.modal-user-row {
     inset: 0 0 0 64px;
     z-index: 40;
   }
+    .composer {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  .composer input {
+    padding: 10px 12px;
+  }
 }
 
 /* --- In-chat mini games --- */
