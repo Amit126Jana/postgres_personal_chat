@@ -2,9 +2,9 @@ import express from "express";
 import http from "http";
 import cors from "cors";
 import path from "path";
-import fs from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Server } from "socket.io";
@@ -38,8 +38,6 @@ import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_
 import { recordGameResult, getGameHistory } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOAD_DIR = path.join(__dirname, "uploads");
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const PORT = process.env.PORT || 4000;
 
@@ -49,6 +47,20 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 const TOKEN_EXPIRY = "30d";
+
+// Media (avatars, chat images/video/audio/files) is stored on Cloudinary instead of local
+// disk, since hosts like Render wipe the local filesystem on every deploy/restart.
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  console.error(
+    "Missing Cloudinary env vars — set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in server/.env."
+  );
+  process.exit(1);
+}
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 function signToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
@@ -78,20 +90,13 @@ function validateCredentials({ phoneNumber, username, password }) {
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use("/uploads", express.static(UPLOAD_DIR));
 app.get("/", (_req, res) => res.send("Chat server is running"));
 
 // --- Media upload (images, audio, video, generic files) ---
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const safeName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-    cb(null, safeName);
-  },
-});
+// Files are held in memory only long enough to stream them to Cloudinary — nothing
+// touches local disk, so uploads survive redeploys.
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
 });
 
@@ -102,13 +107,49 @@ function mediaTypeFor(mimetype) {
   return "file";
 }
 
-app.post("/api/upload", upload.single("file"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  res.json({
-    mediaUrl: `/uploads/${req.file.filename}`,
-    mediaName: req.file.originalname,
-    type: mediaTypeFor(req.file.mimetype),
+// Cloudinary's own resource_type is coarser than ours: images use "image", video AND
+// audio both use "video" (Cloudinary transcodes/streams audio via its video pipeline),
+// and everything else (pdf, docs, zip, etc.) uses "raw".
+function cloudinaryResourceTypeFor(type) {
+  if (type === "image") return "image";
+  if (type === "video" || type === "audio") return "video";
+  return "raw";
+}
+
+function uploadBufferToCloudinary(buffer, { resourceType, originalname }) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: resourceType,
+        folder: "makefriends-chat",
+        // Keep a recognizable public_id without clashing on repeated filenames.
+        public_id: `${Date.now()}-${Math.round(Math.random() * 1e9)}`,
+        filename_override: originalname,
+        use_filename: false,
+      },
+      (err, result) => (err ? reject(err) : resolve(result))
+    );
+    stream.end(buffer);
   });
+}
+
+app.post("/api/upload", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  try {
+    const type = mediaTypeFor(req.file.mimetype);
+    const result = await uploadBufferToCloudinary(req.file.buffer, {
+      resourceType: cloudinaryResourceTypeFor(type),
+      originalname: req.file.originalname,
+    });
+    res.json({
+      mediaUrl: result.secure_url,
+      mediaName: req.file.originalname,
+      type,
+    });
+  } catch (err) {
+    console.error("Cloudinary upload failed:", err.message);
+    res.status(500).json({ error: "Upload failed" });
+  }
 });
 
 // --- Auth: register a new account / log in to an existing one ---
