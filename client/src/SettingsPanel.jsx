@@ -9,6 +9,34 @@ export const THEME_COLORS = [
   { id: "slate", hex: "#94a3b8" },
 ];
 
+// The app's own logo/icon gradient — used as the default when someone picks
+// "Gradient" without having set custom stops yet.
+export const LOGO_GRADIENT = ["#863bff", "#47bfff"];
+
+// Theme color is stored server-side as a single VARCHAR string. We encode the
+// three possible shapes into that one string so no schema/API changes are
+// needed beyond widening the column:
+//   preset id      -> "violet"
+//   custom solid   -> "#a1b2c3"
+//   custom gradient -> "grad:#a1b2c3,#d4e5f6"
+export function resolveThemeColor(value) {
+  if (typeof value === "string" && value.startsWith("grad:")) {
+    const [from, to] = value.slice(5).split(",");
+    return { mode: "gradient", from: from || LOGO_GRADIENT[0], to: to || LOGO_GRADIENT[1] };
+  }
+  const preset = THEME_COLORS.find((t) => t.id === value);
+  if (preset) return { mode: "solid", hex: preset.hex };
+  if (typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)) {
+    return { mode: "solid", hex: value };
+  }
+  return { mode: "solid", hex: THEME_COLORS[0].hex };
+}
+
+export function encodeThemeColor(mode, a, b) {
+  if (mode === "gradient") return `grad:${a},${b}`;
+  return a;
+}
+
 function Collapse({ title, defaultOpen, children }) {
   const [open, setOpen] = useState(!!defaultOpen);
   return (
@@ -35,10 +63,31 @@ export default function SettingsPanel({
 }) {
   const [name, setName] = useState(profile.username || "");
   const [tagline, setTagline] = useState(profile.tagline || "");
-  const [themeColor, setThemeColor] = useState(profile.themeColor || "violet");
+
+  const initialResolved = resolveThemeColor(profile.themeColor);
+  const [colorMode, setColorMode] = useState(initialResolved.mode); // "solid" | "gradient"
+  const [solidHex, setSolidHex] = useState(
+    initialResolved.mode === "solid" ? initialResolved.hex : THEME_COLORS[0].hex,
+  );
+  const [gradFrom, setGradFrom] = useState(
+    initialResolved.mode === "gradient" ? initialResolved.from : LOGO_GRADIENT[0],
+  );
+  const [gradTo, setGradTo] = useState(
+    initialResolved.mode === "gradient" ? initialResolved.to : LOGO_GRADIENT[1],
+  );
+  // Tracks which preset/custom swatch is highlighted when in solid mode.
+  const [activePresetId, setActivePresetId] = useState(
+    initialResolved.mode === "solid"
+      ? THEME_COLORS.find((t) => t.hex.toLowerCase() === initialResolved.hex.toLowerCase())?.id || "custom"
+      : null,
+  );
+
   const [showOnline, setShowOnline] = useState(profile.showOnline !== false);
   const [nameError, setNameError] = useState("");
   const [saved, setSaved] = useState(false);
+
+  const themeColor =
+    colorMode === "gradient" ? encodeThemeColor("gradient", gradFrom, gradTo) : solidHex;
 
   function handleSave() {
     const trimmed = name.trim();
@@ -126,20 +175,73 @@ export default function SettingsPanel({
 
       <div className="settings-section">
         <label className="settings-label">Choose theme color</label>
-        <div className="settings-theme-row">
-          {THEME_COLORS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={"theme-swatch" + (themeColor === t.id ? " active" : "")}
-              style={{ background: t.hex }}
-              title={t.id}
-              onClick={() => setThemeColor(t.id)}
-            >
-              {themeColor === t.id && "✓"}
-            </button>
-          ))}
+
+        <div className="theme-mode-row">
+          <button
+            type="button"
+            className={"theme-mode-btn" + (colorMode === "solid" ? " active" : "")}
+            onClick={() => setColorMode("solid")}
+          >
+            Solid
+          </button>
+          <button
+            type="button"
+            className={"theme-mode-btn" + (colorMode === "gradient" ? " active" : "")}
+            onClick={() => setColorMode("gradient")}
+          >
+            Gradient
+          </button>
         </div>
+
+        {colorMode === "solid" ? (
+          <div className="settings-theme-row">
+            {THEME_COLORS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={"theme-swatch" + (activePresetId === t.id ? " active" : "")}
+                style={{ background: t.hex }}
+                title={t.id}
+                onClick={() => {
+                  setSolidHex(t.hex);
+                  setActivePresetId(t.id);
+                }}
+              >
+                {activePresetId === t.id && "✓"}
+              </button>
+            ))}
+            {/* Custom color picker — opens the native OS color wheel */}
+            <label
+              className={"theme-swatch theme-swatch-custom" + (activePresetId === "custom" ? " active" : "")}
+              title="Custom color"
+            >
+              {activePresetId === "custom" ? "✓" : "+"}
+              <input
+                type="color"
+                value={solidHex}
+                onChange={(e) => {
+                  setSolidHex(e.target.value);
+                  setActivePresetId("custom");
+                }}
+              />
+            </label>
+          </div>
+        ) : (
+          <div className="theme-gradient-row">
+            <label className="theme-gradient-stop">
+              From
+              <input type="color" value={gradFrom} onChange={(e) => setGradFrom(e.target.value)} />
+            </label>
+            <div
+              className="theme-gradient-preview"
+              style={{ background: `linear-gradient(135deg, ${gradFrom}, ${gradTo})` }}
+            />
+            <label className="theme-gradient-stop">
+              To
+              <input type="color" value={gradTo} onChange={(e) => setGradTo(e.target.value)} />
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="settings-section">

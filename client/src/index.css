@@ -1,7 +1,8 @@
 :root {
-  --signal: #6f5cf5; /* accent, overridden live by theme-color picker */
-  --signal-rgb: 111, 92, 245;
-  --signal-dim: #5a48d6;
+  --signal: #863bff; /* accent, overridden live by theme-color picker */
+  --signal-rgb: 134, 59, 255;
+  --signal-dim: #6f2fd6;
+  --signal-gradient: linear-gradient(135deg, #863bff, #47bfff); /* overridden live by theme-color picker */
 
   /* dark mode (default) */
   --bg: #171925;
@@ -14,6 +15,7 @@
   --text-muted: #9498b3;
   --text-faint: #6b6f8c;
   --bubble-mine: var(--signal);
+  --bubble-mine-gradient: var(--signal-gradient);
   --bubble-mine-text: #ffffff;
   --bubble-other: #262a3e;
   --bubble-other-text: #eef0fa;
@@ -37,6 +39,7 @@ html[data-theme="light"] {
   --text-muted: #7a7d97;
   --text-faint: #a4a6bd;
   --bubble-mine: var(--signal);
+  --bubble-mine-gradient: var(--signal-gradient);
   --bubble-mine-text: #ffffff;
   --bubble-other: #f1f2fa;
   --bubble-other-text: #2a2c3e;
@@ -717,7 +720,7 @@ textarea {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 .msg.mine .msg-bubble {
-  background: var(--bubble-mine);
+  background: var(--bubble-mine-gradient, var(--bubble-mine));
   color: var(--bubble-mine-text);
   border-radius: 16px 16px 4px 16px;
 }
@@ -1124,6 +1127,70 @@ textarea {
   border-color: var(--text);
   transform: scale(1.08);
 }
+.theme-swatch-custom {
+  position: relative;
+  overflow: hidden;
+  background: conic-gradient(#ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
+}
+.theme-swatch-custom input[type="color"] {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  border: none;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.theme-mode-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.theme-mode-btn {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.theme-mode-btn.active {
+  border-color: var(--signal);
+  color: var(--text);
+  background: var(--surface-3);
+}
+.theme-gradient-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+.theme-gradient-stop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.theme-gradient-stop input[type="color"] {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+  background: none;
+}
+.theme-gradient-preview {
+  flex: 1;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
 .settings-toggle-row {
   display: flex;
   align-items: center;
@@ -1147,7 +1214,7 @@ textarea {
   padding: 12px;
   border-radius: 11px;
   border: none;
-  background: var(--signal);
+  background: var(--signal-gradient, var(--signal));
   color: #fff;
   font-weight: 600;
   font-size: 14px;
@@ -1776,8 +1843,6 @@ label.modal-user-row {
     padding: 10px 12px;
   }
 }
-
-
 
 /* --- In-chat mini games --- */
 .game-status-line {

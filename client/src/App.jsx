@@ -7,7 +7,7 @@ import CallOverlay from "./CallOverlay.jsx";
 import GroupCallOverlay from "./GroupCallOverlay.jsx";
 import NewChatModal from "./NewChatModal.jsx";
 import IconSprite from "./Icons.jsx";
-import SettingsPanel, { THEME_COLORS } from "./SettingsPanel.jsx";
+import SettingsPanel, { THEME_COLORS, resolveThemeColor } from "./SettingsPanel.jsx";
 import ProfilePage from "./ProfilePage.jsx";
 import GroupsPage from "./GroupsPage.jsx";
 import ContactsPage from "./ContactsPage.jsx";
@@ -164,15 +164,18 @@ function App() {
     conversationsRef.current = conversations;
   }, [conversations]);
 
-  // Apply the chosen accent color across the app.
+  // Apply the chosen accent color (solid or gradient) across the app.
   useEffect(() => {
-    const hex =
-      THEME_COLORS.find((t) => t.id === themeColor)?.hex || THEME_COLORS[0].hex;
+    const resolved = resolveThemeColor(themeColor);
+    const hex = resolved.mode === "gradient" ? resolved.from : resolved.hex;
     document.documentElement.style.setProperty("--signal", hex);
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    document.documentElement.style.setProperty("--signal-rgb", `${r}, ${g}, ${b}`);
     document.documentElement.style.setProperty(
-      "--signal-rgb",
-      `${r}, ${g}, ${b}`,
+      "--signal-gradient",
+      resolved.mode === "gradient"
+        ? `linear-gradient(135deg, ${resolved.from}, ${resolved.to})`
+        : `linear-gradient(135deg, ${hex}, ${hex})`,
     );
   }, [themeColor]);
 

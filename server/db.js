@@ -40,12 +40,17 @@ export async function initDb() {
       password_hash VARCHAR(255) NULL,
       avatar_url VARCHAR(500) NULL,
       tagline VARCHAR(140) NULL,
-      theme_color VARCHAR(20) NOT NULL DEFAULT 'blue',
+      theme_color VARCHAR(60) NOT NULL DEFAULT 'blue',
       show_online SMALLINT NOT NULL DEFAULT 1,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Widen theme_color for existing databases created before gradient support was
+  // added (gradients are encoded as "grad:#rrggbb,#rrggbb", which needs more than
+  // the original 20 chars). No-op if the column is already wide enough.
+  await query(`ALTER TABLE users ALTER COLUMN theme_color TYPE VARCHAR(60)`);
 
   // A conversation is either a 1:1 "direct" chat or a named "group" chat.
   await query(`

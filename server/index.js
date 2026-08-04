@@ -426,7 +426,7 @@ io.on("connection", async (socket) => {
       }
       if (typeof tagline === "string") patch.tagline = tagline.trim().slice(0, 140) || null;
       if (typeof avatarUrl === "string") patch.avatarUrl = avatarUrl;
-      if (typeof themeColor === "string") patch.themeColor = themeColor.slice(0, 20);
+      if (typeof themeColor === "string") patch.themeColor = themeColor.slice(0, 60);
       if (typeof showOnline === "boolean") patch.showOnline = showOnline;
 
       const updated = await updateUserProfile(me.userId, patch);
