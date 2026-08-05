@@ -753,7 +753,21 @@ textarea {
   font-size: 13.5px;
   font-weight: 500;
 }
+.msg-tick {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-faint);
+}
+.msg-tick-seen {
+  color: #47c0ff;
+}
+.msg-bubble-clickable {
+  cursor: pointer;
+}
 .react-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: var(--surface-2);
   color: var(--text-faint);
@@ -814,20 +828,6 @@ textarea {
   color: #fff;
   border-color: var(--signal);
 }
-.msg-menu-trigger {
-  border: none;
-  background: var(--surface-2);
-  color: var(--text-faint);
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 20px;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-  line-height: 1;
-}
-.msg-row:hover .msg-menu-trigger {
-  opacity: 1;
-}
 .msg-menu {
   position: absolute;
   top: 0;
@@ -858,6 +858,16 @@ textarea {
 }
 .msg-menu button:hover {
   background: var(--surface-2);
+}
+.msg-menu-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  cursor: default;
 }
 .reaction-picker {
   position: absolute;

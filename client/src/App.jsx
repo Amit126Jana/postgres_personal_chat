@@ -1253,10 +1253,19 @@ function App() {
                   </div>
                 )}
                 <div className="feed" ref={scrollRef}>
-                  {activeMessages.map((m) => (
+                  {activeMessages.map((m) => {
+                    const mine = m.username === username;
+                    let msgStatus = null;
+                    if (mine && !m.deleted) {
+                      if (m.seenAt) msgStatus = "seen";
+                      else if (activeConv?.type === "direct" && otherMemberOf(activeConv)?.online)
+                        msgStatus = "delivered";
+                      else msgStatus = "sent";
+                    }
+                    return (
                     <div
                       className={
-                        "msg" + (m.username === username ? " mine" : "")
+                        "msg" + (mine ? " mine" : "")
                       }
                       key={m.id}
                     >
@@ -1265,6 +1274,28 @@ function App() {
                         <span className="msg-time">
                           {formatTime(m.createdAt || m.timestamp)}
                         </span>
+                        {msgStatus && (
+                          <span
+                            className={"msg-tick msg-tick-" + msgStatus}
+                            title={
+                              msgStatus === "seen"
+                                ? "Seen"
+                                : msgStatus === "delivered"
+                                ? "Delivered"
+                                : "Sent"
+                            }
+                          >
+                            <svg className="icon" width="15" height="15">
+                              <use
+                                href={
+                                  msgStatus === "sent"
+                                    ? "#check-single-icon"
+                                    : "#check-double-icon"
+                                }
+                              />
+                            </svg>
+                          </span>
+                        )}
                       </div>
                       {m.deleted ? (
                         <div className="msg-row">
@@ -1301,7 +1332,14 @@ function App() {
                         </div>
                       ) : (
                       <div className="msg-row">
-                        <div className="msg-bubble">
+                        <div
+                          className={"msg-bubble" + (mine ? " msg-bubble-clickable" : "")}
+                          onClick={() => {
+                            if (mine && editingMessageId !== m.id) {
+                              setOpenMsgMenuFor(openMsgMenuFor === m.id ? null : m.id);
+                            }
+                          }}
+                        >
                           {m.type === "image" && (
                             <img
                               className="msg-media msg-image"
@@ -1329,6 +1367,7 @@ function App() {
                               href={mediaSrc(m.mediaUrl)}
                               target="_blank"
                               rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
                             >
                               <svg className="icon" width="25" height="25">
                                 <use href="#paperclip-small-icon" />
@@ -1337,7 +1376,7 @@ function App() {
                             </a>
                           )}
                           {m.text && editingMessageId === m.id ? (
-                            <div className="msg-edit-box">
+                            <div className="msg-edit-box" onClick={(e) => e.stopPropagation()}>
                               <textarea
                                 autoFocus
                                 value={editingText}
@@ -1369,34 +1408,40 @@ function App() {
                             )
                           )}
                         </div>
-                        {(canEditMessage(m) || canDeleteMessage(m)) && (
-                          <button
-                            type="button"
-                            className="msg-menu-trigger"
-                            onClick={() =>
-                              setOpenMsgMenuFor(openMsgMenuFor === m.id ? null : m.id)
-                            }
-                            aria-label="Message options"
-                          >
-                            ⋯
-                          </button>
-                        )}
-                        {openMsgMenuFor === m.id && (
-                          <div
-                            className={
-                              "msg-menu" + (m.username === username ? " msg-menu-mine" : "")
-                            }
-                          >
+                        {openMsgMenuFor === m.id && mine && (
+                          <div className="msg-menu msg-menu-mine">
                             {canEditMessage(m) && (
-                              <button type="button" onClick={() => startEditMessage(m)}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  startEditMessage(m);
+                                  setOpenMsgMenuFor(null);
+                                }}
+                              >
                                 Edit
                               </button>
                             )}
                             {canDeleteMessage(m) && (
-                              <button type="button" onClick={() => requestDeleteMessage(m)}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  requestDeleteMessage(m);
+                                  setOpenMsgMenuFor(null);
+                                }}
+                              >
                                 Delete
                               </button>
                             )}
+                            <div className="msg-menu-info">
+                              <svg className="icon" width="14" height="14">
+                                <use href="#info-icon" />
+                              </svg>
+                              {msgStatus === "seen"
+                                ? "Seen"
+                                : msgStatus === "delivered"
+                                ? "Delivered"
+                                : "Sent"}
+                            </div>
                           </div>
                         )}
                         <button
@@ -1409,15 +1454,15 @@ function App() {
                           }
                           aria-label="Add reaction"
                         >
-                          react
+                          <svg className="icon" width="15" height="15">
+                            <use href="#plus-small-icon" />
+                          </svg>
                         </button>
                         {openReactionPickerFor === m.id && (
                           <ReactionPicker
                             anchorClass={
                               "reaction-picker" +
-                              (m.username === username
-                                ? " reaction-picker-mine"
-                                : "")
+                              (mine ? " reaction-picker-mine" : "")
                             }
                             onSelect={(key) => sendReaction(m.id, key)}
                             onClose={() => setOpenReactionPickerFor(null)}
@@ -1459,7 +1504,8 @@ function App() {
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                   <div className="typing-slot">
                     {typingUser && typingUser !== username
                       ? `${typingUser} is typing…`
