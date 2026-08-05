@@ -1314,7 +1314,7 @@ function App() {
                             onClick={() => setOpenMsgMenuFor(null)}
                           >
                             <svg className="icon" width="15" height="15">
-                              <use href="#close-x-icon" />
+                              <use href="#close-icon" />
                             </svg>
                           </button>
                         </div>
