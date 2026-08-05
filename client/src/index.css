@@ -807,6 +807,7 @@ textarea {
   box-shadow: none;
   border-radius: 0;
 }
+
 .msg-text {
   white-space: pre-wrap;
 }
