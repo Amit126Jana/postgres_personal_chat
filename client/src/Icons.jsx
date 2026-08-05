@@ -162,7 +162,7 @@ export default function IconSprite() {
       </symbol>
 
       <symbol id="edit-pencil-icon" viewBox="0 0 24 24">
-        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M3 17.25V21h3.75L17.81 9.94m-4.75-4.75L21 4.25m0 0l-1.06-1.06a2.121 2.121 0 0 0-3 3L18 7.25Z" />
+        <path fill="#000" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M3 17.25V21h3.75L17.81 9.94m-4.75-4.75L21 4.25m0 0l-1.06-1.06a2.121 2.121 0 0 0-3 3L18 7.25Z" />
       </symbol>
 
       <symbol id="delete-trash-icon" viewBox="0 0 24 24">
