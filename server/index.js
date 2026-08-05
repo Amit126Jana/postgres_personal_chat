@@ -31,6 +31,8 @@ import {
   setConversationAvatar,
   isConversationAdmin,
   markMessagesSeen,
+  markMessageDelivered,
+  markMessagesDeliveredForUser,
   editMessage,
   deleteMessage,
 } from "./db.js";
@@ -274,6 +276,25 @@ const io = new Server(server, {
 // is persisted in PostgreSQL via db.js — this map is just live socket presence.
 const onlineUsers = new Map(); // socket.id -> { userId, socketId, username, phoneNumber }
 const userSockets = new Map(); // userId -> Set(socket.id)  (a user may have multiple tabs)
+
+// If any other member of the conversation is currently connected (any tab/socket),
+// the message has already reached their client in real time via the room broadcast —
+// mark it delivered immediately so the sender sees a double grey tick right away,
+// rather than waiting for the recipient to open the chat (which flips it to "seen").
+async function deliverIfRecipientOnline(conversationId, senderId, message) {
+  try {
+    const memberIds = await getConversationMemberIds(conversationId);
+    const othersOnline = memberIds.some(
+      (id) => id !== senderId && (userSockets.get(id)?.size || 0) > 0
+    );
+    if (!othersOnline) return message;
+    const result = await markMessageDelivered(message.id);
+    return result ? { ...message, deliveredAt: result.deliveredAt } : message;
+  } catch (err) {
+    console.error("deliverIfRecipientOnline failed", err.message);
+    return message;
+  }
+}
 const messageReactions = new Map(); // messageId -> Map(emoji -> Set(userId))
 const activeGroupCalls = new Map(); // conversationId -> Map(socketId -> { userId, username })
 
@@ -405,6 +426,12 @@ io.on("connection", async (socket) => {
       showOnline: user.showOnline,
     });
     socket.emit("conversations", conversations);
+
+    // Catch up delivery receipts for anything sent while this user was offline.
+    const deliveredGroups = await markMessagesDeliveredForUser(user.id);
+    for (const { conversationId, messageIds } of deliveredGroups) {
+      io.to(convRoom(conversationId)).emit("messages:delivered", { conversationId, messageIds });
+    }
   } catch (err) {
     console.error("Post-connect setup failed:", err.message);
     socket.emit("login:error", "Could not load your account right now. Please try again.");
@@ -533,7 +560,8 @@ io.on("connection", async (socket) => {
         mediaUrl,
         mediaName,
       });
-      io.to(convRoom(conversationId)).emit("message", saved);
+      const delivered = await deliverIfRecipientOnline(conversationId, me.userId, saved);
+      io.to(convRoom(conversationId)).emit("message", delivered);
     } catch (err) {
       console.error("message failed", err.message);
     }
@@ -651,7 +679,8 @@ io.on("connection", async (socket) => {
         messageId: saved.id,
       };
       gameSessions.set(conversationId, session);
-      io.to(convRoom(conversationId)).emit("message", { ...saved, reactions: {} });
+      const deliveredGame = await deliverIfRecipientOnline(conversationId, me.userId, saved);
+      io.to(convRoom(conversationId)).emit("message", { ...deliveredGame, reactions: {} });
       await broadcastGameSession(io, session);
     } catch (err) {
       console.error("game:invite failed", err.message);
@@ -824,7 +853,7 @@ io.on("connection", async (socket) => {
         options: opts,
         allowMultiple: !!allowMultiple,
       });
-      io.to(convRoom(conversationId)).emit("message", { ...saved, reactions: {} });
+      io.to(convRoom(conversationId)).emit("message", { ...(await deliverIfRecipientOnline(conversationId, me.userId, saved)), reactions: {} });
       io.to(convRoom(conversationId)).emit("poll:update", poll);
     } catch (err) {
       console.error("poll:create failed", err.message);

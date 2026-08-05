@@ -89,11 +89,15 @@ export async function initDb() {
       media_url VARCHAR(500) NULL,
       media_name VARCHAR(255) NULL,
       seen_at TIMESTAMP NULL,
+      delivered_at TIMESTAMP NULL,
       edited_at TIMESTAMP NULL,
       deleted SMALLINT NOT NULL DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Add delivered_at for databases created before delivery-tracking was added.
+  await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP NULL`);
 
   // Persisted record of every finished/forfeited game, so players can look back at past results.
   await query(`
@@ -421,7 +425,8 @@ export async function getConversationMemberIds(conversationId) {
 const MESSAGE_SELECT = `
   SELECT m.id, m.conversation_id AS "conversationId", m.user_id AS "userId", u.username,
          m.type, m.text, m.media_url AS "mediaUrl", m.media_name AS "mediaName",
-         m.seen_at AS "seenAt", m.edited_at AS "editedAt", m.deleted, m.created_at AS "createdAt"
+         m.seen_at AS "seenAt", m.delivered_at AS "deliveredAt", m.edited_at AS "editedAt",
+         m.deleted, m.created_at AS "createdAt"
   FROM messages m JOIN users u ON u.id = m.user_id`;
 
 // A message can be edited/deleted by its sender at any time until it's been seen by
@@ -475,8 +480,44 @@ export async function markMessagesSeen(conversationId, userId) {
   );
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
-  await query("UPDATE messages SET seen_at = NOW() WHERE id = ANY(?)", [ids]);
+  // Being seen implies it was delivered too — cover any message that (for whatever
+  // reason) never got a delivered_at stamp, so it doesn't get stuck showing "sent".
+  await query("UPDATE messages SET seen_at = NOW(), delivered_at = COALESCE(delivered_at, NOW()) WHERE id = ANY(?)", [ids]);
   return ids;
+}
+
+// Called right after a message is inserted. If any other member of the conversation
+// is currently connected (has a live socket, regardless of which chat they're
+// viewing), the message has reached their client in real time — mark it delivered
+// immediately so the sender sees a double grey tick without waiting on "seen".
+export async function markMessageDelivered(messageId) {
+  const [rows] = await query(
+    "UPDATE messages SET delivered_at = NOW() WHERE id = ? AND delivered_at IS NULL RETURNING id, delivered_at AS \"deliveredAt\"",
+    [messageId]
+  );
+  return rows[0] || null;
+}
+
+// Called when a user connects/reconnects, to catch up any messages that were sent to
+// them while they were offline. Returns delivered ids grouped by conversation, so the
+// caller can notify each room.
+export async function markMessagesDeliveredForUser(userId) {
+  const [rows] = await query(
+    `SELECT m.id, m.conversation_id AS "conversationId"
+     FROM messages m
+     JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ?
+     WHERE m.user_id != ? AND m.delivered_at IS NULL AND m.deleted = 0`,
+    [userId, userId]
+  );
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.id);
+  await query("UPDATE messages SET delivered_at = NOW() WHERE id = ANY(?)", [ids]);
+  const byConv = new Map();
+  for (const r of rows) {
+    if (!byConv.has(r.conversationId)) byConv.set(r.conversationId, []);
+    byConv.get(r.conversationId).push(r.id);
+  }
+  return [...byConv.entries()].map(([conversationId, messageIds]) => ({ conversationId, messageIds }));
 }
 
 // Edits a text message. Only the sender may edit, and only within the allowed window.

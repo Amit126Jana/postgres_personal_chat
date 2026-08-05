@@ -34,6 +34,15 @@ function formatTime(ts) {
   });
 }
 
+function formatFullDateTime(ts) {
+  return new Date(ts).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function initials(name) {
   return (name || "?").trim().slice(0, 2).toUpperCase();
 }
@@ -86,6 +95,7 @@ function App() {
   const [showComposerEmoji, setShowComposerEmoji] = useState(false);
   const [openReactionPickerFor, setOpenReactionPickerFor] = useState(null);
   const [openMsgMenuFor, setOpenMsgMenuFor] = useState(null);
+  const [infoPanelMsgId, setInfoPanelMsgId] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingText, setEditingText] = useState("");
   const [playingReaction, setPlayingReaction] = useState(null); // { kind: "voice"|"video", url }
@@ -481,6 +491,19 @@ function App() {
           ...prev,
           [conversationId]: existing.map((m) =>
             idSet.has(m.id) ? { ...m, seenAt: m.seenAt || new Date().toISOString() } : m,
+          ),
+        };
+      });
+    });
+
+    socket.on("messages:delivered", ({ conversationId, messageIds }) => {
+      setMessagesByConv((prev) => {
+        const existing = prev[conversationId] || [];
+        const idSet = new Set(messageIds);
+        return {
+          ...prev,
+          [conversationId]: existing.map((m) =>
+            idSet.has(m.id) ? { ...m, deliveredAt: m.deliveredAt || new Date().toISOString() } : m,
           ),
         };
       });
@@ -1238,6 +1261,65 @@ function App() {
                   >
                     📊 Poll
                   </button>
+                  {openMsgMenuFor &&
+                    (() => {
+                      const selectedMsg = activeMessages.find((m) => m.id === openMsgMenuFor);
+                      if (!selectedMsg || selectedMsg.username !== username) return null;
+                      return (
+                        <div className="header-msg-actions">
+                          {canEditMessage(selectedMsg) && (
+                            <button
+                              type="button"
+                              className="header-action-btn"
+                              title="Edit message"
+                              onClick={() => {
+                                startEditMessage(selectedMsg);
+                                setOpenMsgMenuFor(null);
+                              }}
+                            >
+                              <svg className="icon" width="17" height="17">
+                                <use href="#edit-pencil-icon" />
+                              </svg>
+                            </button>
+                          )}
+                          {canDeleteMessage(selectedMsg) && (
+                            <button
+                              type="button"
+                              className="header-action-btn"
+                              title="Delete message"
+                              onClick={() => {
+                                requestDeleteMessage(selectedMsg);
+                                setOpenMsgMenuFor(null);
+                              }}
+                            >
+                              <svg className="icon" width="17" height="17">
+                                <use href="#delete-trash-icon" />
+                              </svg>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="header-action-btn"
+                            title="Message info"
+                            onClick={() => setInfoPanelMsgId(selectedMsg.id)}
+                          >
+                            <svg className="icon" width="17" height="17">
+                              <use href="#info-icon" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="header-action-btn header-action-close"
+                            title="Close"
+                            onClick={() => setOpenMsgMenuFor(null)}
+                          >
+                            <svg className="icon" width="15" height="15">
+                              <use href="#close-x-icon" />
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    })()}
                 </div>
                 {gameError && (
                   <div
@@ -1258,8 +1340,7 @@ function App() {
                     let msgStatus = null;
                     if (mine && !m.deleted) {
                       if (m.seenAt) msgStatus = "seen";
-                      else if (activeConv?.type === "direct" && otherMemberOf(activeConv)?.online)
-                        msgStatus = "delivered";
+                      else if (m.deliveredAt) msgStatus = "delivered";
                       else msgStatus = "sent";
                     }
                     return (
@@ -1333,7 +1414,11 @@ function App() {
                       ) : (
                       <div className="msg-row">
                         <div
-                          className={"msg-bubble" + (mine ? " msg-bubble-clickable" : "")}
+                          className={
+                            "msg-bubble" +
+                            (mine ? " msg-bubble-clickable" : "") +
+                            (openMsgMenuFor === m.id ? " msg-bubble-selected" : "")
+                          }
                           onClick={() => {
                             if (mine && editingMessageId !== m.id) {
                               setOpenMsgMenuFor(openMsgMenuFor === m.id ? null : m.id);
@@ -1408,42 +1493,6 @@ function App() {
                             )
                           )}
                         </div>
-                        {openMsgMenuFor === m.id && mine && (
-                          <div className="msg-menu msg-menu-mine">
-                            {canEditMessage(m) && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  startEditMessage(m);
-                                  setOpenMsgMenuFor(null);
-                                }}
-                              >
-                                Edit
-                              </button>
-                            )}
-                            {canDeleteMessage(m) && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  requestDeleteMessage(m);
-                                  setOpenMsgMenuFor(null);
-                                }}
-                              >
-                                Delete
-                              </button>
-                            )}
-                            <div className="msg-menu-info">
-                              <svg className="icon" width="14" height="14">
-                                <use href="#info-icon" />
-                              </svg>
-                              {msgStatus === "seen"
-                                ? "Seen"
-                                : msgStatus === "delivered"
-                                ? "Delivered"
-                                : "Sent"}
-                            </div>
-                          </div>
-                        )}
                         <button
                           type="button"
                           className="react-trigger"
@@ -1454,9 +1503,10 @@ function App() {
                           }
                           aria-label="Add reaction"
                         >
-                          <svg className="icon" width="15" height="15">
-                            <use href="#plus-small-icon" />
+                          <svg className="icon" width="18" height="18">
+                            <use href="#emoji-icon" />
                           </svg>
+                          <span className="react-trigger-badge">+</span>
                         </button>
                         {openReactionPickerFor === m.id && (
                           <ReactionPicker
@@ -1617,6 +1667,73 @@ function App() {
           onClose={() => setOpenGameConvId(null)}
         />
       )}
+
+      {infoPanelMsgId &&
+        (() => {
+          const infoMsg = activeMessages.find((m) => m.id === infoPanelMsgId);
+          if (!infoMsg) return null;
+          return (
+            <div className="modal-backdrop" onClick={() => setInfoPanelMsgId(null)}>
+              <div
+                className="modal-card"
+                onClick={(e) => e.stopPropagation()}
+                style={{ maxWidth: "320px" }}
+              >
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={() => setInfoPanelMsgId(null)}
+                >
+                  ✕
+                </button>
+                <h3 style={{ margin: "0 0 14px" }}>Message info</h3>
+                {infoMsg.text && (
+                  <div className="msg-info-preview">{infoMsg.text}</div>
+                )}
+                <div className="msg-info-rows">
+                  <div className="msg-info-row">
+                    <svg className="icon" width="16" height="16">
+                      <use href="#check-single-icon" />
+                    </svg>
+                    <span className="msg-info-label">Sent</span>
+                    <span className="msg-info-value">
+                      {formatFullDateTime(infoMsg.createdAt || infoMsg.timestamp)}
+                    </span>
+                  </div>
+                  <div className="msg-info-row">
+                    <svg className="icon" width="16" height="16">
+                      <use href="#check-double-icon" />
+                    </svg>
+                    <span className="msg-info-label">Delivered</span>
+                    <span className="msg-info-value">
+                      {infoMsg.deliveredAt ? formatFullDateTime(infoMsg.deliveredAt) : "Not yet"}
+                    </span>
+                  </div>
+                  <div className="msg-info-row">
+                    <svg className="icon" width="16" height="16" style={{ color: "#47c0ff" }}>
+                      <use href="#check-double-icon" />
+                    </svg>
+                    <span className="msg-info-label">Seen</span>
+                    <span className="msg-info-value">
+                      {infoMsg.seenAt ? formatFullDateTime(infoMsg.seenAt) : "Not yet"}
+                    </span>
+                  </div>
+                  {infoMsg.editedAt && (
+                    <div className="msg-info-row">
+                      <svg className="icon" width="16" height="16">
+                        <use href="#edit-pencil-icon" />
+                      </svg>
+                      <span className="msg-info-label">Edited</span>
+                      <span className="msg-info-value">
+                        {formatFullDateTime(infoMsg.editedAt)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       {playingReaction && (
         <div className="modal-backdrop" onClick={() => setPlayingReaction(null)}>

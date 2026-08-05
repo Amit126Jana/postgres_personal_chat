@@ -595,6 +595,81 @@ textarea {
   font-size: 12.5px;
   font-weight: 600;
 }
+.header-msg-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: header-actions-in 0.14s ease;
+}
+@keyframes header-actions-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.header-action-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: none;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.header-action-btn:hover {
+  background: var(--signal-gradient, var(--signal));
+  color: #fff;
+}
+.header-action-close {
+  background: transparent;
+  color: var(--text-faint);
+}
+.header-action-close:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.msg-bubble-selected {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
+}
+.msg-info-preview {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  max-height: 80px;
+  overflow-y: auto;
+  word-break: break-word;
+}
+.msg-info-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.msg-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-faint);
+}
+.msg-info-row .icon {
+  flex-shrink: 0;
+}
+.msg-info-label {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  min-width: 70px;
+}
+.msg-info-value {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
 .conn-status {
   padding: 12px 20px;
   font-size: 11px;
@@ -765,17 +840,36 @@ textarea {
   cursor: pointer;
 }
 .react-trigger {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: var(--surface-2);
   color: var(--text-faint);
-  font-size: 11px;
-  padding: 4px 9px;
-  border-radius: 20px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
   opacity: 0;
   transition: opacity 0.12s ease;
+}
+.react-trigger-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--signal-gradient, var(--signal));
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--surface);
 }
 .msg-row:hover .react-trigger {
   opacity: 1;
