@@ -88,9 +88,8 @@ textarea {
 .icon {
   display: inline-block;
   vertical-align: middle;
-  color: currentColor;
+  color: inherit;
 }
-
 .hidden-file-input {
   position: absolute;
   width: 1px;
