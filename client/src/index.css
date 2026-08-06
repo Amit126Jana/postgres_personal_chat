@@ -1997,14 +1997,50 @@ label.modal-user-row {
     padding: 14px 12px;
   }
   .msg {
-    max-width: 82%;
+    max-width: 92%;
   }
   .msg-selectable .msg-content {
-    max-width: 76%;
+    max-width: 88%;
+  }
+  .msg-bubble {
+    font-size: 13px;
+    padding: 9px 12px;
+  }
+  .msg-meta {
+    font-size: 10.5px;
   }
   .delete-sheet,
   .wallpaper-modal {
     width: 92vw;
+  }
+  .composer {
+    padding: 8px 8px;
+    gap: 4px;
+  }
+  .composer input {
+    min-width: 0;
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+  .emoji-trigger,
+  .attach-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+  }
+  .emoji-trigger svg,
+  .attach-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+  .send_btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+  }
+  .send_btn svg {
+    width: 22px;
+    height: 22px;
   }
 }
 
