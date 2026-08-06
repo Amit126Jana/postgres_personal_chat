@@ -393,13 +393,20 @@ function previewTextFor(message) {
 // closed. Members who are online already got the message in real time over the
 // socket, so we skip them to avoid a redundant notification banner.
 async function notifyOfflineMembers(conversationId, sender, message) {
+  console.log("DEBUG notifyOfflineMembers called. beamsEnabled:", beamsEnabled()); // TEMP
   if (!beamsEnabled()) return;
   try {
     const memberIds = await getConversationMemberIds(conversationId);
+    console.log("DEBUG memberIds:", memberIds, "sender:", sender.userId); // TEMP
+    console.log("DEBUG userSockets snapshot:", [...userSockets.entries()].map(([k, v]) => [k, v.size])); // TEMP
     const offlineIds = memberIds.filter(
       (id) => id !== sender.userId && (userSockets.get(id)?.size || 0) === 0
     );
-    if (offlineIds.length === 0) return;
+    console.log("DEBUG offlineIds (will push to):", offlineIds); // TEMP
+    if (offlineIds.length === 0) {
+      console.log("DEBUG no offline members - nothing to push"); // TEMP
+      return;
+    }
     const body = previewTextFor(message);
     await Promise.all(
       offlineIds.map((uid) =>
@@ -410,6 +417,7 @@ async function notifyOfflineMembers(conversationId, sender, message) {
         })
       )
     );
+    console.log("DEBUG pushToUser calls completed for:", offlineIds); // TEMP
   } catch (err) {
     console.error("notifyOfflineMembers failed:", err.message);
   }
