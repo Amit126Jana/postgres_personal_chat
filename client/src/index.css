@@ -1954,3 +1954,194 @@ label.modal-user-row {
   margin: 0 0 6px;
   color: var(--text);
 }
+/* --- Multi-select, delete-for-me/everyone, clear chat, wallpapers --- */
+.msg-selectable {
+  cursor: pointer;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+.msg-selectable.mine {
+  flex-direction: row-reverse;
+}
+.msg-selectable > .msg-row,
+.msg-selectable > .msg-meta {
+  flex: 1;
+}
+.msg-select-checkbox {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--text-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #fff;
+  background: transparent;
+}
+.msg-select-checkbox.checked {
+  background: var(--signal);
+  border-color: var(--signal);
+}
+.msg-row-selected {
+  background: rgba(var(--signal-rgb), 0.12);
+  border-radius: 12px;
+}
+
+.select-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.select-toolbar-count {
+  flex: 1;
+  font-weight: 600;
+}
+
+.chat-menu-wrap {
+  position: relative;
+  margin-left: auto;
+}
+.chat-menu-trigger {
+  margin-left: 4px;
+}
+.chat-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.chat-menu-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: var(--panel-bg, #1f1f2e);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  overflow: hidden;
+  z-index: 41;
+}
+.chat-menu-dropdown button {
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 11px 16px;
+  font-size: 14px;
+  color: inherit;
+  cursor: pointer;
+}
+.chat-menu-dropdown button:hover {
+  background: rgba(var(--signal-rgb), 0.15);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.delete-sheet {
+  background: var(--panel-bg, #1f1f2e);
+  border-radius: 14px;
+  padding: 18px;
+  width: 320px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.delete-sheet-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  text-align: center;
+}
+.delete-sheet-btn {
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(var(--signal-rgb), 0.15);
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.delete-sheet-btn:hover {
+  background: rgba(var(--signal-rgb), 0.28);
+}
+.delete-sheet-danger {
+  background: rgba(224, 69, 69, 0.18);
+  color: #e04545;
+}
+.delete-sheet-danger:hover {
+  background: rgba(224, 69, 69, 0.3);
+}
+.delete-sheet-cancel {
+  background: transparent;
+  text-align: center;
+}
+
+.wallpaper-modal {
+  background: var(--panel-bg, #1f1f2e);
+  border-radius: 14px;
+  padding: 20px;
+  width: 360px;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.wallpaper-modal-title {
+  font-weight: 600;
+  font-size: 16px;
+}
+.wallpaper-swatches {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.wallpaper-swatch {
+  height: 56px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.wallpaper-swatch:hover {
+  border-color: var(--signal);
+}
+.wallpaper-modal-actions {
+  display: flex;
+  gap: 8px;
+}
+.wallpaper-modal-actions button {
+  flex: 1;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.wallpaper-modal-actions button:hover {
+  background: rgba(var(--signal-rgb), 0.15);
+}
+.wallpaper-modal-close {
+  align-self: center;
+  padding: 9px 22px;
+  border-radius: 20px;
+  border: none;
+  background: var(--signal);
+  color: #fff;
+  cursor: pointer;
+}

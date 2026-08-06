@@ -103,6 +103,17 @@ function App() {
   const [uploading, setUploading] = useState(false);
   const [mobileChatOpen, setMobileChatOpen] = useState(false); // narrow-screen nav: list vs conversation
 
+  // --- Multi-select / delete-for-me / clear chat / wallpapers (all client-side, per-account) ---
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedMsgIds, setSelectedMsgIds] = useState(() => new Set());
+  const [hiddenMsgIds, setHiddenMsgIds] = useState({}); // conversationId -> Set(messageId) — "deleted for me"
+  const [clearedAt, setClearedAt] = useState({}); // conversationId -> timestamp — "clear chat"
+  const [wallpapers, setWallpapers] = useState({}); // { default: {type,value}|null, [conversationId]: {type,value}|null }
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
+  const [deleteSheet, setDeleteSheet] = useState(null); // { ids: [], canEveryone: bool }
+  const wallpaperFileInputRef = useRef(null);
+
   // --- Call state ---
   const [callState, setCallState] = useState(null); // null | "calling" | "ringing" | "connecting" | "active"
   const [callPeer, setCallPeer] = useState(null); // { id, username }
@@ -197,6 +208,54 @@ function App() {
     );
     localStorage.setItem("mf_theme_mode", darkMode ? "dark" : "light");
   }, [darkMode]);
+
+  // Load this account's locally-stored "delete for me" / "clear chat" / wallpaper
+  // state as soon as we know who's logged in. All of this is intentionally
+  // per-device/per-account only (never synced to the server), mirroring how
+  // WhatsApp's "delete for me" and chat wallpapers only affect your own view.
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      const hidden = JSON.parse(localStorage.getItem(`mf_hidden_${userId}`) || "{}");
+      const hiddenSets = {};
+      for (const convId of Object.keys(hidden)) {
+        hiddenSets[convId] = new Set(hidden[convId]);
+      }
+      setHiddenMsgIds(hiddenSets);
+    } catch {
+      setHiddenMsgIds({});
+    }
+    try {
+      setClearedAt(JSON.parse(localStorage.getItem(`mf_cleared_${userId}`) || "{}"));
+    } catch {
+      setClearedAt({});
+    }
+    try {
+      setWallpapers(JSON.parse(localStorage.getItem(`mf_wallpapers_${userId}`) || "{}"));
+    } catch {
+      setWallpapers({});
+    }
+  }, [userId]);
+
+  // Persist "delete for me" ids for this account whenever they change.
+  useEffect(() => {
+    if (!userId) return;
+    const plain = {};
+    for (const convId of Object.keys(hiddenMsgIds)) {
+      plain[convId] = [...hiddenMsgIds[convId]];
+    }
+    localStorage.setItem(`mf_hidden_${userId}`, JSON.stringify(plain));
+  }, [hiddenMsgIds, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    localStorage.setItem(`mf_cleared_${userId}`, JSON.stringify(clearedAt));
+  }, [clearedAt, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    localStorage.setItem(`mf_wallpapers_${userId}`, JSON.stringify(wallpapers));
+  }, [wallpapers, userId]);
 
   // Resume a session after a page refresh: if we have saved credentials, log back in
   // automatically instead of dropping the person back on the gate screen.
@@ -855,8 +914,121 @@ function App() {
   }
 
   const activeConv = conversations.find((c) => c.id === activeConvId) || null;
-  const activeMessages = messagesByConv[activeConvId] || [];
+  const activeMessagesRaw = messagesByConv[activeConvId] || [];
+  const hiddenForActiveConv = hiddenMsgIds[activeConvId];
+  const clearedAtActiveConv = clearedAt[activeConvId] || 0;
+  const activeMessages = activeMessagesRaw.filter((m) => {
+    if (hiddenForActiveConv && hiddenForActiveConv.has(m.id)) return false;
+    if (clearedAtActiveConv && new Date(m.createdAt || m.timestamp).getTime() <= clearedAtActiveConv) return false;
+    return true;
+  });
   const typingUser = typingByConv[activeConvId];
+
+  // Wallpaper this chat should show: its own choice, else the account-wide default.
+  const activeWallpaper = activeConvId
+    ? wallpapers[activeConvId] || wallpapers.default || null
+    : null;
+  const feedBackgroundStyle = (() => {
+    if (!activeWallpaper) return {};
+    if (activeWallpaper.type === "image") {
+      return {
+        backgroundImage: `url(${mediaSrc(activeWallpaper.value)})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      };
+    }
+    return { background: activeWallpaper.value };
+  })();
+
+  function setHiddenForConv(convId, ids) {
+    setHiddenMsgIds((prev) => {
+      const next = { ...prev };
+      const set = new Set(next[convId] || []);
+      ids.forEach((id) => set.add(id));
+      next[convId] = set;
+      return next;
+    });
+  }
+
+  function toggleSelectMsg(id) {
+    setSelectedMsgIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function startSelectMode(seedMsgId) {
+    setSelectMode(true);
+    setOpenMsgMenuFor(null);
+    setShowChatMenu(false);
+    setSelectedMsgIds(seedMsgId != null ? new Set([seedMsgId]) : new Set());
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedMsgIds(new Set());
+  }
+
+  // Opens the "Delete for me / Delete for everyone" choice sheet for one or many messages.
+  function openDeleteSheet(ids) {
+    const msgs = ids.map((id) => activeMessages.find((m) => m.id === id)).filter(Boolean);
+    const canEveryone = msgs.length > 0 && msgs.every((m) => canDeleteMessage(m));
+    setDeleteSheet({ ids, canEveryone });
+  }
+
+  function confirmDeleteForMe() {
+    if (!deleteSheet || !activeConvId) return;
+    setHiddenForConv(activeConvId, deleteSheet.ids);
+    setDeleteSheet(null);
+    exitSelectMode();
+  }
+
+  function confirmDeleteForEveryone() {
+    if (!deleteSheet) return;
+    deleteSheet.ids.forEach((id) => {
+      const m = activeMessages.find((mm) => mm.id === id);
+      if (m) socket.emit("message:delete", { conversationId: m.conversationId, messageId: id });
+    });
+    setDeleteSheet(null);
+    exitSelectMode();
+  }
+
+  function requestClearChat() {
+    setShowChatMenu(false);
+    if (!activeConvId) return;
+    if (!window.confirm("Clear all messages in this chat? This only clears it for you.")) return;
+    setClearedAt((prev) => ({ ...prev, [activeConvId]: Date.now() }));
+  }
+
+  async function handleWallpaperFilePicked(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const { mediaUrl } = await uploadFile(file);
+      setWallpapers((prev) => ({ ...prev, [activeConvId]: { type: "image", value: mediaUrl } }));
+    } catch {
+      window.alert("Couldn't upload that image.");
+    }
+  }
+
+  function applyWallpaperPreset(preset, applyToAll) {
+    setWallpapers((prev) => ({
+      ...prev,
+      [applyToAll ? "default" : activeConvId]: preset,
+    }));
+  }
+
+  function clearWallpaper(applyToAll) {
+    setWallpapers((prev) => {
+      const next = { ...prev };
+      if (applyToAll) delete next.default;
+      else delete next[activeConvId];
+      return next;
+    });
+  }
 
   // Find the live socket id of the other member of a direct chat, for video-calling them.
   function otherMemberOf(conv) {
@@ -930,11 +1102,7 @@ function App() {
 
   function requestDeleteMessage(m) {
     setOpenMsgMenuFor(null);
-    if (!window.confirm("Delete this message?")) return;
-    socket.emit("message:delete", {
-      conversationId: m.conversationId,
-      messageId: m.id,
-    });
+    openDeleteSheet([m.id]);
   }
 
   function openConversation(convId) {
@@ -1175,6 +1343,34 @@ function App() {
               </div>
             ) : (
               <>
+                {selectMode ? (
+                  <div className="room-label select-toolbar">
+                    <button
+                      type="button"
+                      className="header-action-btn header-action-close"
+                      title="Cancel selection"
+                      onClick={exitSelectMode}
+                    >
+                      <svg className="icon" width="15" height="15">
+                        <use href="#close-icon" />
+                      </svg>
+                    </button>
+                    <span className="select-toolbar-count">
+                      {selectedMsgIds.size} selected
+                    </span>
+                    <button
+                      type="button"
+                      className="call-icon-btn group-call-header-btn"
+                      disabled={selectedMsgIds.size === 0}
+                      onClick={() => openDeleteSheet([...selectedMsgIds])}
+                    >
+                      <svg className="icon" width="17" height="17">
+                        <use href="#delete-trash-icon" />
+                      </svg>
+                      Delete
+                    </button>
+                  </div>
+                ) : (
                 <div className="room-label">
                   <button
                     type="button"
@@ -1320,7 +1516,42 @@ function App() {
                         </div>
                       );
                     })()}
+                  <div className="chat-menu-wrap">
+                    <button
+                      type="button"
+                      className="header-action-btn chat-menu-trigger"
+                      title="Chat options"
+                      onClick={() => setShowChatMenu((v) => !v)}
+                    >
+                      <svg className="icon" width="20" height="20">
+                        <use href="#more-icon" />
+                      </svg>
+                    </button>
+                    {showChatMenu && (
+                      <>
+                        <div className="chat-menu-backdrop" onClick={() => setShowChatMenu(false)} />
+                        <div className="chat-menu-dropdown">
+                          <button type="button" onClick={() => startSelectMode(null)}>
+                            Select messages
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              setShowWallpaperPicker(true);
+                            }}
+                          >
+                            Chat wallpaper
+                          </button>
+                          <button type="button" onClick={requestClearChat}>
+                            Clear chat
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
+                )}
                 {gameError && (
                   <div
                     style={{
@@ -1334,7 +1565,7 @@ function App() {
                     {gameError}
                   </div>
                 )}
-                <div className="feed" ref={scrollRef}>
+                <div className="feed" ref={scrollRef} style={feedBackgroundStyle}>
                   {activeMessages.map((m) => {
                     const mine = m.username === username;
                     let msgStatus = null;
@@ -1343,13 +1574,31 @@ function App() {
                       else if (m.deliveredAt) msgStatus = "delivered";
                       else msgStatus = "sent";
                     }
+                    const isSelected = selectedMsgIds.has(m.id);
                     return (
                     <div
                       className={
-                        "msg" + (mine ? " mine" : "")
+                        "msg" + (mine ? " mine" : "") + (selectMode ? " msg-selectable" : "") + (isSelected ? " msg-row-selected" : "")
                       }
                       key={m.id}
+                      onClick={() => {
+                        if (selectMode) toggleSelectMsg(m.id);
+                      }}
+                      onContextMenu={(e) => {
+                        if (!selectMode && !m.deleted) {
+                          e.preventDefault();
+                          startSelectMode(m.id);
+                        }
+                      }}
                     >
+                      {selectMode && (
+                        <span
+                          className={"msg-select-checkbox" + (isSelected ? " checked" : "")}
+                          aria-hidden="true"
+                        >
+                          {isSelected ? "✓" : ""}
+                        </span>
+                      )}
                       <div className="msg-meta">
                         <span className="msg-user">{m.username}</span>
                         <span className="msg-time">
@@ -1419,7 +1668,12 @@ function App() {
                             (mine ? " msg-bubble-clickable" : "") +
                             (openMsgMenuFor === m.id ? " msg-bubble-selected" : "")
                           }
-                          onClick={() => {
+                          onClick={(e) => {
+                            if (selectMode) {
+                              e.stopPropagation();
+                              toggleSelectMsg(m.id);
+                              return;
+                            }
                             if (mine && editingMessageId !== m.id) {
                               setOpenMsgMenuFor(openMsgMenuFor === m.id ? null : m.id);
                             }
@@ -1625,6 +1879,89 @@ function App() {
             )}
           </main>
         </>
+      )}
+
+      {deleteSheet && (
+        <div className="modal-overlay" onClick={() => setDeleteSheet(null)}>
+          <div className="delete-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="delete-sheet-title">
+              Delete {deleteSheet.ids.length > 1 ? `${deleteSheet.ids.length} messages` : "message"}?
+            </div>
+            <button type="button" className="delete-sheet-btn" onClick={confirmDeleteForMe}>
+              Delete for me
+            </button>
+            {deleteSheet.canEveryone && (
+              <button
+                type="button"
+                className="delete-sheet-btn delete-sheet-danger"
+                onClick={confirmDeleteForEveryone}
+              >
+                Delete for everyone
+              </button>
+            )}
+            <button type="button" className="delete-sheet-btn delete-sheet-cancel" onClick={() => setDeleteSheet(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showWallpaperPicker && (
+        <div className="modal-overlay" onClick={() => setShowWallpaperPicker(false)}>
+          <div className="wallpaper-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="wallpaper-modal-title">Chat wallpaper</div>
+            <input
+              ref={wallpaperFileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handleWallpaperFilePicked}
+            />
+            <div className="wallpaper-swatches">
+              {[
+                { type: "color", value: "linear-gradient(135deg,#0f2027,#203a43,#2c5364)" },
+                { type: "color", value: "linear-gradient(135deg,#0b486b,#f56217)" },
+                { type: "color", value: "linear-gradient(135deg,#1e3c72,#2a5298)" },
+                { type: "color", value: "linear-gradient(135deg,#134e5e,#71b280)" },
+                { type: "color", value: "linear-gradient(135deg,#232526,#414345)" },
+                { type: "color", value: "linear-gradient(135deg,#8e2de2,#4a00e0)" },
+              ].map((preset, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className="wallpaper-swatch"
+                  style={{ background: preset.value }}
+                  onClick={() => applyWallpaperPreset(preset, false)}
+                />
+              ))}
+            </div>
+            <div className="wallpaper-modal-actions">
+              <button type="button" onClick={() => wallpaperFileInputRef.current?.click()}>
+                Upload photo…
+              </button>
+              <button type="button" onClick={() => clearWallpaper(false)}>
+                Reset this chat
+              </button>
+            </div>
+            <div className="wallpaper-modal-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  const current = wallpapers[activeConvId];
+                  if (current) applyWallpaperPreset(current, true);
+                }}
+              >
+                Use as default for all chats
+              </button>
+              <button type="button" onClick={() => clearWallpaper(true)}>
+                Clear default
+              </button>
+            </div>
+            <button type="button" className="wallpaper-modal-close" onClick={() => setShowWallpaperPicker(false)}>
+              Done
+            </button>
+          </div>
+        </div>
       )}
 
       {showNewChat && (
