@@ -34,12 +34,17 @@ export function generateBeamsToken(userId) {
 export async function pushToUser(userId, { title, body, deepLink, icon }) {
   if (!beamsClient) return;
   try {
+    // Beams requires an absolute URI for `icon` — a relative path like "/logo.png"
+    // fails validation with a 422 and silently drops the whole notification.
+    const baseUrl = (process.env.CLIENT_URL || "").replace(/\/$/, "");
+    const resolvedIcon = icon || (baseUrl ? `${baseUrl}/logo.png` : undefined);
+
     await beamsClient.publishToUsers([String(userId)], {
       web: {
         notification: {
           title: title?.slice(0, 100) || "New message",
           body: body?.slice(0, 200) || "",
-          icon: icon || "/logo.png",
+          ...(resolvedIcon ? { icon: resolvedIcon } : {}),
           deep_link: deepLink,
         },
       },
