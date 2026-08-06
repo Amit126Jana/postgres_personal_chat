@@ -1576,14 +1576,14 @@ function App() {
                         }
                       }}
                     >
-                      {selectMode && (
+                      {/* {selectMode && (
                         <span
                           className={"msg-select-checkbox" + (isSelected ? " checked" : "")}
                           aria-hidden="true"
                         >
                           {isSelected ? "✓" : ""}
                         </span>
-                      )}
+                      )} */}
                       <div className="msg-content">
                       <div className="msg-meta">
                         <span className="msg-user">{m.username}</span>
