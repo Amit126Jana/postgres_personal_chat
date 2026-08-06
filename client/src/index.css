@@ -2017,10 +2017,10 @@ label.modal-user-row {
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  background: var(--panel-bg, #1f1f2e);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  background: var(--surface-2);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
   min-width: 180px;
@@ -2033,11 +2033,11 @@ label.modal-user-row {
   text-align: left;
   padding: 11px 16px;
   font-size: 14px;
-  color: inherit;
+  color: var(--text);
   cursor: pointer;
 }
 .chat-menu-dropdown button:hover {
-  background: rgba(var(--signal-rgb), 0.15);
+  background: var(--surface-3);
 }
 
 .modal-overlay {
@@ -2051,7 +2051,8 @@ label.modal-user-row {
 }
 
 .delete-sheet {
-  background: var(--panel-bg, #1f1f2e);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 14px;
   padding: 18px;
   width: 320px;
@@ -2059,7 +2060,8 @@ label.modal-user-row {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow);
+  color: var(--text);
 }
 .delete-sheet-title {
   font-weight: 600;
@@ -2070,28 +2072,30 @@ label.modal-user-row {
   padding: 11px 14px;
   border-radius: 8px;
   border: none;
-  background: rgba(var(--signal-rgb), 0.15);
-  color: inherit;
+  background: var(--surface-2);
+  color: var(--text);
   font-size: 14px;
   cursor: pointer;
 }
 .delete-sheet-btn:hover {
-  background: rgba(var(--signal-rgb), 0.28);
+  background: var(--surface-3);
 }
 .delete-sheet-danger {
-  background: rgba(224, 69, 69, 0.18);
-  color: #e04545;
+  background: rgba(241, 85, 108, 0.15);
+  color: var(--danger);
 }
 .delete-sheet-danger:hover {
-  background: rgba(224, 69, 69, 0.3);
+  background: rgba(241, 85, 108, 0.28);
 }
 .delete-sheet-cancel {
   background: transparent;
   text-align: center;
+  color: var(--text-muted);
 }
 
 .wallpaper-modal {
-  background: var(--panel-bg, #1f1f2e);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 14px;
   padding: 20px;
   width: 360px;
@@ -2099,7 +2103,8 @@ label.modal-user-row {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow);
+  color: var(--text);
 }
 .wallpaper-modal-title {
   font-weight: 600;
@@ -2119,6 +2124,10 @@ label.modal-user-row {
 .wallpaper-swatch:hover {
   border-color: var(--signal);
 }
+.wallpaper-swatch.wallpaper-swatch-selected {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 2px rgba(var(--signal-rgb), 0.35);
+}
 .wallpaper-modal-actions {
   display: flex;
   gap: 8px;
@@ -2127,14 +2136,14 @@ label.modal-user-row {
   flex: 1;
   padding: 9px 10px;
   border-radius: 8px;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
-  background: transparent;
-  color: inherit;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
   font-size: 13px;
   cursor: pointer;
 }
 .wallpaper-modal-actions button:hover {
-  background: rgba(var(--signal-rgb), 0.15);
+  background: var(--surface-3);
 }
 .wallpaper-modal-close {
   align-self: center;
@@ -2144,4 +2153,9 @@ label.modal-user-row {
   background: var(--signal);
   color: #fff;
   cursor: pointer;
+}
+.wallpaper-loading {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
 }

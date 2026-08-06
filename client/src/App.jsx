@@ -103,12 +103,15 @@ function App() {
   const [uploading, setUploading] = useState(false);
   const [mobileChatOpen, setMobileChatOpen] = useState(false); // narrow-screen nav: list vs conversation
 
-  // --- Multi-select / delete-for-me / clear chat / wallpapers (all client-side, per-account) ---
+  // --- Multi-select / delete-for-me / clear chat / wallpapers ---
+  // hiddenMsgIds, clearedAt, and wallpapers are all synced from the server (see the
+  // "login:success" handler below) so they persist across logout/sessions/devices —
+  // not just kept in this browser's localStorage.
   const [selectMode, setSelectMode] = useState(false);
   const [selectedMsgIds, setSelectedMsgIds] = useState(() => new Set());
-  const [hiddenMsgIds, setHiddenMsgIds] = useState({}); // conversationId -> Set(messageId) — "deleted for me"
+  const [hiddenMsgIds, setHiddenMsgIds] = useState(() => new Set()); // Set(messageId) — "deleted for me"
   const [clearedAt, setClearedAt] = useState({}); // conversationId -> timestamp — "clear chat"
-  const [wallpapers, setWallpapers] = useState({}); // { default: {type,value}|null, [conversationId]: {type,value}|null }
+  const [wallpapers, setWallpapers] = useState({}); // { default: {type,value}|null, [conversationId]: {type,value} }
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
   const [deleteSheet, setDeleteSheet] = useState(null); // { ids: [], canEveryone: bool }
@@ -209,53 +212,32 @@ function App() {
     localStorage.setItem("mf_theme_mode", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  // Load this account's locally-stored "delete for me" / "clear chat" / wallpaper
-  // state as soon as we know who's logged in. All of this is intentionally
-  // per-device/per-account only (never synced to the server), mirroring how
-  // WhatsApp's "delete for me" and chat wallpapers only affect your own view.
+  // Server pushes this account's "delete for me" / "clear chat" / wallpaper state as
+  // part of the login payload (see "login:success" handler below) so it's ready before
+  // messages render. Live updates after that arrive via the listeners below.
   useEffect(() => {
-    if (!userId) return;
-    try {
-      const hidden = JSON.parse(localStorage.getItem(`mf_hidden_${userId}`) || "{}");
-      const hiddenSets = {};
-      for (const convId of Object.keys(hidden)) {
-        hiddenSets[convId] = new Set(hidden[convId]);
-      }
-      setHiddenMsgIds(hiddenSets);
-    } catch {
-      setHiddenMsgIds({});
+    function onWallpapersUpdate(payload) {
+      setWallpapers(payload || {});
     }
-    try {
-      setClearedAt(JSON.parse(localStorage.getItem(`mf_cleared_${userId}`) || "{}"));
-    } catch {
-      setClearedAt({});
+    function onMessagesHidden({ messageIds }) {
+      setHiddenMsgIds((prev) => {
+        const next = new Set(prev);
+        messageIds.forEach((id) => next.add(id));
+        return next;
+      });
     }
-    try {
-      setWallpapers(JSON.parse(localStorage.getItem(`mf_wallpapers_${userId}`) || "{}"));
-    } catch {
-      setWallpapers({});
+    function onChatCleared({ conversationId, clearedAt: ts }) {
+      setClearedAt((prev) => ({ ...prev, [conversationId]: new Date(ts).getTime() }));
     }
-  }, [userId]);
-
-  // Persist "delete for me" ids for this account whenever they change.
-  useEffect(() => {
-    if (!userId) return;
-    const plain = {};
-    for (const convId of Object.keys(hiddenMsgIds)) {
-      plain[convId] = [...hiddenMsgIds[convId]];
-    }
-    localStorage.setItem(`mf_hidden_${userId}`, JSON.stringify(plain));
-  }, [hiddenMsgIds, userId]);
-
-  useEffect(() => {
-    if (!userId) return;
-    localStorage.setItem(`mf_cleared_${userId}`, JSON.stringify(clearedAt));
-  }, [clearedAt, userId]);
-
-  useEffect(() => {
-    if (!userId) return;
-    localStorage.setItem(`mf_wallpapers_${userId}`, JSON.stringify(wallpapers));
-  }, [wallpapers, userId]);
+    socket.on("wallpapers:update", onWallpapersUpdate);
+    socket.on("messages:hidden", onMessagesHidden);
+    socket.on("chat:cleared", onChatCleared);
+    return () => {
+      socket.off("wallpapers:update", onWallpapersUpdate);
+      socket.off("messages:hidden", onMessagesHidden);
+      socket.off("chat:cleared", onChatCleared);
+    };
+  }, [socket]);
 
   // Resume a session after a page refresh: if we have saved credentials, log back in
   // automatically instead of dropping the person back on the gate screen.
@@ -415,6 +397,9 @@ function App() {
         tagline: tl,
         themeColor: tc,
         showOnline: so,
+        wallpapers: serverWallpapers,
+        hiddenMessageIds,
+        clearedChats,
       }) => {
         setLoginError("");
         setResuming(false);
@@ -425,6 +410,13 @@ function App() {
         setTagline(tl || "");
         setThemeColor(tc || "violet");
         setShowOnline(so !== false);
+        setWallpapers(serverWallpapers || {});
+        setHiddenMsgIds(new Set(hiddenMessageIds || []));
+        const clearedTimestamps = {};
+        for (const convId of Object.keys(clearedChats || {})) {
+          clearedTimestamps[convId] = new Date(clearedChats[convId]).getTime();
+        }
+        setClearedAt(clearedTimestamps);
         setJoined(true);
         if (
           typeof Notification !== "undefined" &&
@@ -915,10 +907,9 @@ function App() {
 
   const activeConv = conversations.find((c) => c.id === activeConvId) || null;
   const activeMessagesRaw = messagesByConv[activeConvId] || [];
-  const hiddenForActiveConv = hiddenMsgIds[activeConvId];
   const clearedAtActiveConv = clearedAt[activeConvId] || 0;
   const activeMessages = activeMessagesRaw.filter((m) => {
-    if (hiddenForActiveConv && hiddenForActiveConv.has(m.id)) return false;
+    if (hiddenMsgIds.has(m.id)) return false;
     if (clearedAtActiveConv && new Date(m.createdAt || m.timestamp).getTime() <= clearedAtActiveConv) return false;
     return true;
   });
@@ -939,16 +930,6 @@ function App() {
     }
     return { background: activeWallpaper.value };
   })();
-
-  function setHiddenForConv(convId, ids) {
-    setHiddenMsgIds((prev) => {
-      const next = { ...prev };
-      const set = new Set(next[convId] || []);
-      ids.forEach((id) => set.add(id));
-      next[convId] = set;
-      return next;
-    });
-  }
 
   function toggleSelectMsg(id) {
     setSelectedMsgIds((prev) => {
@@ -979,8 +960,14 @@ function App() {
   }
 
   function confirmDeleteForMe() {
-    if (!deleteSheet || !activeConvId) return;
-    setHiddenForConv(activeConvId, deleteSheet.ids);
+    if (!deleteSheet) return;
+    socket.emit("messages:deleteForMe", { messageIds: deleteSheet.ids });
+    // Optimistic local update; the server also echoes back "messages:hidden".
+    setHiddenMsgIds((prev) => {
+      const next = new Set(prev);
+      deleteSheet.ids.forEach((id) => next.add(id));
+      return next;
+    });
     setDeleteSheet(null);
     exitSelectMode();
   }
@@ -999,6 +986,8 @@ function App() {
     setShowChatMenu(false);
     if (!activeConvId) return;
     if (!window.confirm("Clear all messages in this chat? This only clears it for you.")) return;
+    socket.emit("chat:clear", { conversationId: activeConvId });
+    // Optimistic local update; the server also echoes back "chat:cleared".
     setClearedAt((prev) => ({ ...prev, [activeConvId]: Date.now() }));
   }
 
@@ -1008,26 +997,22 @@ function App() {
     if (!file) return;
     try {
       const { mediaUrl } = await uploadFile(file);
-      setWallpapers((prev) => ({ ...prev, [activeConvId]: { type: "image", value: mediaUrl } }));
+      socket.emit("wallpaper:set", { conversationId: activeConvId, type: "image", value: mediaUrl });
     } catch {
       window.alert("Couldn't upload that image.");
     }
   }
 
   function applyWallpaperPreset(preset, applyToAll) {
-    setWallpapers((prev) => ({
-      ...prev,
-      [applyToAll ? "default" : activeConvId]: preset,
-    }));
+    socket.emit("wallpaper:set", {
+      conversationId: applyToAll ? null : activeConvId,
+      type: preset.type,
+      value: preset.value,
+    });
   }
 
-  function clearWallpaper(applyToAll) {
-    setWallpapers((prev) => {
-      const next = { ...prev };
-      if (applyToAll) delete next.default;
-      else delete next[activeConvId];
-      return next;
-    });
+  function clearWallpaperChoice(applyToAll) {
+    socket.emit("wallpaper:clear", { conversationId: applyToAll ? null : activeConvId });
   }
 
   // Find the live socket id of the other member of a direct chat, for video-calling them.
@@ -1925,21 +1910,25 @@ function App() {
                 { type: "color", value: "linear-gradient(135deg,#134e5e,#71b280)" },
                 { type: "color", value: "linear-gradient(135deg,#232526,#414345)" },
                 { type: "color", value: "linear-gradient(135deg,#8e2de2,#4a00e0)" },
-              ].map((preset, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className="wallpaper-swatch"
-                  style={{ background: preset.value }}
-                  onClick={() => applyWallpaperPreset(preset, false)}
-                />
-              ))}
+              ].map((preset, i) => {
+                const current = wallpapers[activeConvId];
+                const isSelected = current && current.type === preset.type && current.value === preset.value;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className={"wallpaper-swatch" + (isSelected ? " wallpaper-swatch-selected" : "")}
+                    style={{ background: preset.value }}
+                    onClick={() => applyWallpaperPreset(preset, false)}
+                  />
+                );
+              })}
             </div>
             <div className="wallpaper-modal-actions">
               <button type="button" onClick={() => wallpaperFileInputRef.current?.click()}>
                 Upload photo…
               </button>
-              <button type="button" onClick={() => clearWallpaper(false)}>
+              <button type="button" onClick={() => clearWallpaperChoice(false)}>
                 Reset this chat
               </button>
             </div>
@@ -1953,7 +1942,7 @@ function App() {
               >
                 Use as default for all chats
               </button>
-              <button type="button" onClick={() => clearWallpaper(true)}>
+              <button type="button" onClick={() => clearWallpaperChoice(true)}>
                 Clear default
               </button>
             </div>

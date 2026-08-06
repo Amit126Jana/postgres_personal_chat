@@ -139,6 +139,49 @@ export async function initDb() {
     )
   `);
 
+  // A user's chat wallpaper choices, stored server-side so they survive logging out /
+  // clearing localStorage / switching devices. conversation_id NULL means "this user's
+  // account-wide default wallpaper" (used by any chat that doesn't have its own).
+  await query(`
+    CREATE TABLE IF NOT EXISTS chat_wallpapers (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      conversation_id INTEGER NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      type VARCHAR(10) NOT NULL CHECK (type IN ('color', 'image')),
+      value VARCHAR(500) NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS chat_wallpapers_default_uidx
+     ON chat_wallpapers(user_id) WHERE conversation_id IS NULL`
+  );
+  await query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS chat_wallpapers_conv_uidx
+     ON chat_wallpapers(user_id, conversation_id) WHERE conversation_id IS NOT NULL`
+  );
+
+  // Per-user "delete for me" and "clear chat" state, stored server-side for the same
+  // reason as wallpapers above — so they persist across sessions/devices instead of
+  // living only in one browser's localStorage.
+  await query(`
+    CREATE TABLE IF NOT EXISTS hidden_messages (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, message_id)
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS cleared_chats (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      cleared_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, conversation_id)
+    )
+  `);
+
   console.log("PostgreSQL: tables ready");
 }
 
@@ -661,4 +704,108 @@ export async function getPollTally(pollId) {
     votersByOption,
     totalVoters: votedUserIds.size,
   };
+}
+
+// --- Chat wallpapers (server-persisted so they survive logout/session loss) ---
+
+// Returns { default: {type,value}|null, [conversationId]: {type,value} } for this user.
+export async function getWallpapers(userId) {
+  const [rows] = await query(
+    'SELECT conversation_id AS "conversationId", type, value FROM chat_wallpapers WHERE user_id = ?',
+    [userId]
+  );
+  const result = { default: null };
+  for (const r of rows) {
+    const entry = { type: r.type, value: r.value };
+    if (r.conversationId == null) result.default = entry;
+    else result[r.conversationId] = entry;
+  }
+  return result;
+}
+
+// Sets (replacing any existing) wallpaper for a specific chat, or — when conversationId
+// is null — this user's account-wide default used by any chat without its own choice.
+export async function setWallpaper(userId, conversationId, type, value) {
+  if (conversationId == null) {
+    await query("DELETE FROM chat_wallpapers WHERE user_id = ? AND conversation_id IS NULL", [userId]);
+    await query(
+      "INSERT INTO chat_wallpapers (user_id, conversation_id, type, value) VALUES (?, NULL, ?, ?)",
+      [userId, type, value]
+    );
+  } else {
+    if (!(await isConversationMember(conversationId, userId))) {
+      const err = new Error("Not a member of this conversation.");
+      err.code = "FORBIDDEN";
+      throw err;
+    }
+    await query("DELETE FROM chat_wallpapers WHERE user_id = ? AND conversation_id = ?", [userId, conversationId]);
+    await query(
+      "INSERT INTO chat_wallpapers (user_id, conversation_id, type, value) VALUES (?, ?, ?, ?)",
+      [userId, conversationId, type, value]
+    );
+  }
+  return getWallpapers(userId);
+}
+
+export async function clearWallpaper(userId, conversationId) {
+  if (conversationId == null) {
+    await query("DELETE FROM chat_wallpapers WHERE user_id = ? AND conversation_id IS NULL", [userId]);
+  } else {
+    await query("DELETE FROM chat_wallpapers WHERE user_id = ? AND conversation_id = ?", [userId, conversationId]);
+  }
+  return getWallpapers(userId);
+}
+
+// --- "Delete for me" (per-user hidden messages) ---
+
+export async function hideMessagesForUser(userId, messageIds) {
+  if (!messageIds || messageIds.length === 0) return;
+  const placeholders = [];
+  const params = [];
+  for (const id of messageIds) {
+    placeholders.push("(?, ?)");
+    params.push(userId, id);
+  }
+  await query(
+    `INSERT INTO hidden_messages (user_id, message_id) VALUES ${placeholders.join(", ")}
+     ON CONFLICT (user_id, message_id) DO NOTHING`,
+    params
+  );
+}
+
+// All message ids this user has hidden ("deleted for me"), for merging into their view.
+export async function getHiddenMessageIds(userId) {
+  const [rows] = await query('SELECT message_id AS "messageId" FROM hidden_messages WHERE user_id = ?', [userId]);
+  return rows.map((r) => r.messageId);
+}
+
+// --- "Clear chat" (per-user, per-conversation cutoff timestamp) ---
+
+export async function clearChatForUser(userId, conversationId) {
+  if (!(await isConversationMember(conversationId, userId))) {
+    const err = new Error("Not a member of this conversation.");
+    err.code = "FORBIDDEN";
+    throw err;
+  }
+  await query(
+    `INSERT INTO cleared_chats (user_id, conversation_id, cleared_at) VALUES (?, ?, NOW())
+     ON CONFLICT (user_id, conversation_id) DO UPDATE SET cleared_at = NOW()`,
+    [userId, conversationId]
+  );
+  const [rows] = await query(
+    'SELECT cleared_at AS "clearedAt" FROM cleared_chats WHERE user_id = ? AND conversation_id = ?',
+    [userId, conversationId]
+  );
+  return rows[0]?.clearedAt || null;
+}
+
+// All per-conversation "cleared before" cutoffs for this user, e.g. { 12: "2026-08-01T..." }.
+export async function getClearedChats(userId) {
+  const [rows] = await query(
+    'SELECT conversation_id AS "conversationId", cleared_at AS "clearedAt" FROM cleared_chats WHERE user_id = ?',
+    [userId]
+  );
+  const result = {};
+  for (const r of rows) result[r.conversationId] = r.clearedAt;
+  return result;
 }

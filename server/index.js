@@ -35,6 +35,13 @@ import {
   markMessagesDeliveredForUser,
   editMessage,
   deleteMessage,
+  getWallpapers,
+  setWallpaper,
+  clearWallpaper,
+  hideMessagesForUser,
+  getHiddenMessageIds,
+  clearChatForUser,
+  getClearedChats,
 } from "./db.js";
 import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_PLAYER_GAMES } from "./games.js";
 import { recordGameResult, getGameHistory } from "./db.js";
@@ -416,6 +423,11 @@ io.on("connection", async (socket) => {
 
   try {
     const conversations = await joinAllConversations(socket, user.id);
+    const [wallpapers, hiddenMessageIds, clearedChats] = await Promise.all([
+      getWallpapers(user.id),
+      getHiddenMessageIds(user.id),
+      getClearedChats(user.id),
+    ]);
     socket.emit("login:success", {
       userId: user.id,
       username: user.username,
@@ -424,6 +436,9 @@ io.on("connection", async (socket) => {
       tagline: user.tagline,
       themeColor: user.themeColor,
       showOnline: user.showOnline,
+      wallpapers,
+      hiddenMessageIds,
+      clearedChats,
     });
     socket.emit("conversations", conversations);
 
@@ -620,6 +635,54 @@ io.on("connection", async (socket) => {
       io.to(convRoom(conversationId)).emit("message:update", result.message);
     } catch (err) {
       console.error("message:delete failed", err.message);
+    }
+  });
+
+  // --- "Delete for me": hides message(s) only in this user's own view, server-persisted
+  // so it survives re-login on any device. Does not touch the message for anyone else. ---
+  socket.on("messages:deleteForMe", async ({ messageIds }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me || !Array.isArray(messageIds) || messageIds.length === 0) return;
+    try {
+      await hideMessagesForUser(me.userId, messageIds.slice(0, 200));
+      socket.emit("messages:hidden", { messageIds });
+    } catch (err) {
+      console.error("messages:deleteForMe failed", err.message);
+    }
+  });
+
+  // --- "Clear chat": hides everything currently in the chat, only for this user. ---
+  socket.on("chat:clear", async ({ conversationId }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me || !conversationId) return;
+    try {
+      const clearedAt = await clearChatForUser(me.userId, conversationId);
+      socket.emit("chat:cleared", { conversationId, clearedAt });
+    } catch (err) {
+      console.error("chat:clear failed", err.message);
+    }
+  });
+
+  // --- Chat wallpaper: per-conversation, or account-wide default when conversationId is null ---
+  socket.on("wallpaper:set", async ({ conversationId, type, value }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me || !type || !value) return;
+    try {
+      const wallpapers = await setWallpaper(me.userId, conversationId ?? null, type, value.slice(0, 500));
+      socket.emit("wallpapers:update", wallpapers);
+    } catch (err) {
+      console.error("wallpaper:set failed", err.message);
+    }
+  });
+
+  socket.on("wallpaper:clear", async ({ conversationId }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me) return;
+    try {
+      const wallpapers = await clearWallpaper(me.userId, conversationId ?? null);
+      socket.emit("wallpapers:update", wallpapers);
+    } catch (err) {
+      console.error("wallpaper:clear failed", err.message);
     }
   });
 
