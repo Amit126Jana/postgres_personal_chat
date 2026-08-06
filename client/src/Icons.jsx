@@ -147,6 +147,16 @@ export default function IconSprite() {
         <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="m20 20-4.8-4.8" />
       </symbol>
 
+      <symbol id="refresh-icon" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 0 1 13.66-5.66M20 12a8 8 0 0 1-13.66 5.66" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M17.5 3.5v4h-4M6.5 20.5v-4h4" />
+      </symbol>
+
+      <symbol id="admin-icon" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M12 3.5 5 6.3v5.2c0 4.5 3 7.6 7 8.9 4-1.3 7-4.4 7-8.9V6.3L12 3.5Z" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="m9.3 12.2 1.9 1.9 3.6-3.9" />
+      </symbol>
+
       <symbol id="phone-icon" viewBox="0 0 24 24">
         <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M5.5 4h3l1.5 4-2 1.5a11 11 0 0 0 5.5 5.5L15 13l4 1.5v3a1.5 1.5 0 0 1-1.6 1.5A15 15 0 0 1 4 5.6 1.5 1.5 0 0 1 5.5 4Z" />
       </symbol>

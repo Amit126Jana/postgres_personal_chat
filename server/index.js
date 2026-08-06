@@ -42,6 +42,8 @@ import {
   getHiddenMessageIds,
   clearChatForUser,
   getClearedChats,
+  listUsersForAdmin,
+  setUserAdminByPhone,
 } from "./db.js";
 import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_PLAYER_GAMES } from "./games.js";
 import { recordGameResult, getGameHistory } from "./db.js";
@@ -73,6 +75,22 @@ cloudinary.config({
 
 function signToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+}
+
+// Comma-separated phone numbers in server/.env (ADMIN_PHONE_NUMBERS=+1555...,+1555...)
+// are granted the global admin flag on every login/register, so ops can manage admins
+// without touching the database directly.
+const ADMIN_PHONE_NUMBERS = new Set(
+  (process.env.ADMIN_PHONE_NUMBERS || "")
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean)
+);
+async function syncAdminFlag(phoneNumber) {
+  if (ADMIN_PHONE_NUMBERS.size === 0) return;
+  if (ADMIN_PHONE_NUMBERS.has(phoneNumber)) {
+    await setUserAdminByPhone(phoneNumber, true);
+  }
 }
 
 const PHONE_REGEX = /^\+?[1-9]\d{9,14}$/;
@@ -170,8 +188,9 @@ app.post("/api/auth/register", async (req, res) => {
 
     const passwordHash = await bcrypt.hash(result.pass, 10);
     const user = await createUser(result.phone, result.name, passwordHash);
+    await syncAdminFlag(result.phone);
     const token = signToken(user.id);
-    res.status(201).json({ token, user });
+    res.status(201).json({ token, user: { ...user, isAdmin: ADMIN_PHONE_NUMBERS.has(result.phone) } });
   } catch (err) {
     if (err.code === "PHONE_TAKEN") return res.status(409).json({ error: err.message });
     console.error("register failed:", err.message);
@@ -195,6 +214,7 @@ app.post("/api/auth/login", async (req, res) => {
     if (!ok) return res.status(401).json(genericError);
 
     await touchLastSeen(row.id);
+    await syncAdminFlag(row.phone_number);
     const token = signToken(row.id);
     const user = {
       id: row.id,
@@ -204,6 +224,7 @@ app.post("/api/auth/login", async (req, res) => {
       tagline: row.tagline,
       themeColor: row.theme_color,
       showOnline: !!row.show_online,
+      isAdmin: !!row.is_admin || ADMIN_PHONE_NUMBERS.has(row.phone_number),
     };
     res.json({ token, user });
   } catch (err) {
@@ -228,10 +249,47 @@ async function requireAuth(req, res, next) {
   }
 }
 
+// Must run after requireAuth. Blocks anyone whose account isn't flagged is_admin.
+function requireAdmin(req, res, next) {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: "Admin access required" });
+  next();
+}
+
 // --- REST: users & conversations (used to populate "new chat" / "new group" UI) ---
 app.get("/api/users", requireAuth, async (_req, res) => {
   try {
     res.json(await listUsers());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Admin: full user directory with live connection info. No conversation/message
+// data is ever included here — deliberately, since chat content is private. ---
+app.get("/api/admin/users", requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    const users = await listUsersForAdmin();
+    const byUserId = new Map();
+    for (const conn of onlineUsers.values()) {
+      const list = byUserId.get(conn.userId) || [];
+      list.push({
+        socketId: conn.socketId,
+        connectedAt: conn.connectedAt,
+        ip: conn.ip,
+        transport: conn.transport,
+      });
+      byUserId.set(conn.userId, list);
+    }
+    const result = users.map((u) => {
+      const sessions = byUserId.get(u.id) || [];
+      return {
+        ...u,
+        online: sessions.length > 0,
+        sessionCount: sessions.length,
+        sessions,
+      };
+    });
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -417,6 +475,9 @@ io.on("connection", async (socket) => {
     socketId: socket.id,
     username: user.username,
     phoneNumber: user.phoneNumber,
+    connectedAt: Date.now(),
+    ip: socket.handshake.headers["x-forwarded-for"]?.split(",")[0]?.trim() || socket.handshake.address,
+    transport: socket.conn?.transport?.name || "unknown",
   });
   if (!userSockets.has(user.id)) userSockets.set(user.id, new Set());
   userSockets.get(user.id).add(socket.id);
@@ -436,6 +497,7 @@ io.on("connection", async (socket) => {
       tagline: user.tagline,
       themeColor: user.themeColor,
       showOnline: user.showOnline,
+      isAdmin: user.isAdmin,
       wallpapers,
       hiddenMessageIds,
       clearedChats,
