@@ -47,6 +47,7 @@ import {
 } from "./db.js";
 import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_PLAYER_GAMES } from "./games.js";
 import { recordGameResult, getGameHistory } from "./db.js";
+import { beamsEnabled, generateBeamsToken, pushToUser } from "./beams.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -248,6 +249,21 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// Auth endpoint for the Pusher Beams client SDK's TokenProvider. It calls this with
+// ?user_id=<id> after the user logs in; we only ever issue a token for the user the
+// bearer token actually belongs to, so one user can never subscribe as another.
+app.get("/pusher/beams-auth", requireAuth, (req, res) => {
+  if (!beamsEnabled()) return res.status(503).json({ error: "Push notifications are not configured" });
+  if (String(req.query.user_id) !== String(req.user.id)) {
+    return res.status(403).json({ error: "Cannot generate a push token for another user" });
+  }
+  try {
+    res.json(generateBeamsToken(req.user.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- REST: users & conversations (used to populate "new chat" / "new group" UI) ---
 app.get("/api/users", requireAuth, async (_req, res) => {
   try {
@@ -352,6 +368,52 @@ async function deliverIfRecipientOnline(conversationId, senderId, message) {
     return message;
   }
 }
+function previewTextFor(message) {
+  switch (message.type) {
+    case "image":
+      return "📷 Photo";
+    case "video":
+      return "🎥 Video";
+    case "audio":
+      return "🎤 Voice message";
+    case "file":
+      return "📎 " + (message.mediaName || "File");
+    case "poll":
+      return "📊 Poll";
+    case "game":
+      return "🎮 Game";
+    default:
+      return message.text?.trim() || "New message";
+  }
+}
+
+// Sends a real (OS-level) push notification via Pusher Beams to any conversation
+// member who has no socket connected at all right now — i.e. their app/tab is fully
+// closed. Members who are online already got the message in real time over the
+// socket, so we skip them to avoid a redundant notification banner.
+async function notifyOfflineMembers(conversationId, sender, message) {
+  if (!beamsEnabled()) return;
+  try {
+    const memberIds = await getConversationMemberIds(conversationId);
+    const offlineIds = memberIds.filter(
+      (id) => id !== sender.userId && (userSockets.get(id)?.size || 0) === 0
+    );
+    if (offlineIds.length === 0) return;
+    const body = previewTextFor(message);
+    await Promise.all(
+      offlineIds.map((uid) =>
+        pushToUser(uid, {
+          title: sender.username,
+          body,
+          deepLink: process.env.CLIENT_URL || undefined,
+        })
+      )
+    );
+  } catch (err) {
+    console.error("notifyOfflineMembers failed:", err.message);
+  }
+}
+
 const messageReactions = new Map(); // messageId -> Map(emoji -> Set(userId))
 const activeGroupCalls = new Map(); // conversationId -> Map(socketId -> { userId, username })
 
@@ -631,6 +693,7 @@ io.on("connection", async (socket) => {
       });
       const delivered = await deliverIfRecipientOnline(conversationId, me.userId, saved);
       io.to(convRoom(conversationId)).emit("message", delivered);
+      notifyOfflineMembers(conversationId, me, delivered);
     } catch (err) {
       console.error("message failed", err.message);
     }

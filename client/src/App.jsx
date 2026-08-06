@@ -17,6 +17,7 @@ import PollComposer from "./PollComposer.jsx";
 import PollCard from "./PollCard.jsx";
 import GameHistory from "./GameHistory.jsx";
 import AdminPage from "./AdminPage.jsx";
+import { Client as BeamsClient, TokenProvider as BeamsTokenProvider } from "@pusher/push-notifications-web";
 
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ||
@@ -72,6 +73,7 @@ function App() {
   const [loginError, setLoginError] = useState("");
   const [connected, setConnected] = useState(false);
   const tokenRef = useRef(localStorage.getItem("mf_token") || "");
+  const beamsClientRef = useRef(null);
 
   // --- Profile / account ---
   const [avatarUrl, setAvatarUrl] = useState(null);
@@ -922,11 +924,48 @@ function App() {
     }
   }
 
+  // Real push notifications (Pusher Beams) — arrive even when this tab/app is fully
+  // closed, as long as the device has internet. Starts once logged in, stops on logout.
+  // No-ops quietly if VITE_BEAMS_INSTANCE_ID isn't set, the browser doesn't support
+  // service workers, or the page isn't served over HTTPS (all required for web push).
+  useEffect(() => {
+    const instanceId = import.meta.env.VITE_BEAMS_INSTANCE_ID;
+    if (!joined || !userId || !instanceId) return;
+    if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const client = new BeamsClient({ instanceId });
+        const tokenProvider = new BeamsTokenProvider({
+          url: `${SERVER_URL}/pusher/beams-auth`,
+          headers: { Authorization: `Bearer ${tokenRef.current}` },
+        });
+        await client.start();
+        if (cancelled) return;
+        await client.setUserId(String(userId), tokenProvider);
+        beamsClientRef.current = client;
+      } catch (err) {
+        // Most common cause: the user hasn't granted notification permission yet, or
+        // denied it. Not an error worth surfacing to them.
+        console.warn("Push notification setup skipped:", err.message);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [joined, userId]);
+
   function logout() {
     tokenRef.current = "";
     localStorage.removeItem("mf_token");
     teardownCall();
     socket.disconnect();
+    if (beamsClientRef.current) {
+      beamsClientRef.current.stop().catch(() => {});
+      beamsClientRef.current = null;
+    }
     setJoined(false);
     setUserId(null);
     setPhoneNumber("");
