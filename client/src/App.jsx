@@ -115,6 +115,7 @@ function App() {
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
   const [deleteSheet, setDeleteSheet] = useState(null); // { ids: [], canEveryone: bool }
+  const [selectModeGuard, setSelectModeGuard] = useState(null); // { kind: "send" | "leave", action: () => void }
   const wallpaperFileInputRef = useRef(null);
 
   // --- Call state ---
@@ -710,6 +711,17 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConvId]);
 
+  // Warn on actual tab close/refresh while messages are selected (browser-native prompt).
+  useEffect(() => {
+    function onBeforeUnload(e) {
+      if (!selectMode) return;
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [selectMode]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
@@ -717,10 +729,7 @@ function App() {
     });
   }, [messagesByConv, activeConvId]);
 
-  function handleSend(e) {
-    e.preventDefault();
-    const text = draft.trim();
-    if (!text || !activeConvId) return;
+  function actuallySendDraft(text) {
     socket.emit("message", {
       conversationId: activeConvId,
       text,
@@ -728,6 +737,28 @@ function App() {
     });
     setDraft("");
     socket.emit("typing", { conversationId: activeConvId, isTyping: false });
+  }
+
+  function handleSend(e) {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text || !activeConvId) return;
+    if (selectMode) {
+      setSelectModeGuard({ kind: "send", action: () => actuallySendDraft(text) });
+      return;
+    }
+    actuallySendDraft(text);
+  }
+
+  // Runs `action` immediately, unless we're in message-select mode, in which
+  // case it opens a themed confirm dialog first (sending / navigating away
+  // both clear the current selection).
+  function runOrConfirmLeaveSelect(action, kind = "leave") {
+    if (selectMode) {
+      setSelectModeGuard({ kind, action });
+    } else {
+      action();
+    }
   }
 
   function handleDraftChange(e) {
@@ -1132,7 +1163,7 @@ function App() {
           type="button"
           className={"rail-btn" + (activeView === "chats" ? " active" : "")}
           title="Chats"
-          onClick={() => setActiveView("chats")}
+          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("chats"))}
         >
           <svg className="icon" width="22" height="22">
             <use href="#chat-icon" />
@@ -1142,7 +1173,7 @@ function App() {
           type="button"
           className={"rail-btn" + (activeView === "profile" ? " active" : "")}
           title="Profile"
-          onClick={() => setActiveView("profile")}
+          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("profile"))}
         >
           <svg className="icon" width="22" height="22">
             <use href="#profile-icon" />
@@ -1152,7 +1183,7 @@ function App() {
           type="button"
           className={"rail-btn" + (activeView === "groups" ? " active" : "")}
           title="Groups"
-          onClick={() => setActiveView("groups")}
+          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("groups"))}
         >
           <svg className="icon" width="22" height="22">
             <use href="#groups-icon" />
@@ -1162,7 +1193,7 @@ function App() {
           type="button"
           className={"rail-btn" + (activeView === "contacts" ? " active" : "")}
           title="Contacts"
-          onClick={() => setActiveView("contacts")}
+          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("contacts"))}
         >
           <svg className="icon" width="22" height="22">
             <use href="#contacts-icon" />
@@ -1183,7 +1214,7 @@ function App() {
           type="button"
           className={"rail-btn" + (activeView === "settings" ? " active" : "")}
           title="Settings"
-          onClick={() => setActiveView("settings")}
+          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("settings"))}
         >
           <svg className="icon" width="22" height="22">
             <use href="#settings-icon" />
@@ -1193,7 +1224,7 @@ function App() {
           type="button"
           className="rail-btn rail-avatar"
           title={username}
-          onClick={() => setActiveView("profile")}
+          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("profile"))}
         >
           {avatarUrl ? (
             <img src={avatarUrl} alt="" />
@@ -1267,9 +1298,11 @@ function App() {
                     "conv-item" + (c.id === activeConvId ? " active" : "")
                   }
                   onClick={() => {
-                    setActiveConvId(c.id);
-                    setMobileChatOpen(true);
-                    socket.emit("conversation:read", { conversationId: c.id });
+                    runOrConfirmLeaveSelect(() => {
+                      setActiveConvId(c.id);
+                      setMobileChatOpen(true);
+                      socket.emit("conversation:read", { conversationId: c.id });
+                    });
                   }}
                 >
                   <span className="avatar">
@@ -1361,7 +1394,7 @@ function App() {
                     type="button"
                     className="mobile-back-btn"
                     aria-label="Back to chats"
-                    onClick={() => setMobileChatOpen(false)}
+                    onClick={() => runOrConfirmLeaveSelect(() => setMobileChatOpen(false))}
                   >
                     ←
                   </button>
@@ -1733,22 +1766,24 @@ function App() {
                             )
                           )}
                         </div>
-                        <button
-                          type="button"
-                          className="react-trigger"
-                          onClick={() =>
-                            setOpenReactionPickerFor(
-                              openReactionPickerFor === m.id ? null : m.id,
-                            )
-                          }
-                          aria-label="Add reaction"
-                        >
-                          <svg className="icon" width="18" height="18">
-                            <use href="#emoji-icon" />
-                          </svg>
-                          <span className="react-trigger-badge">+</span>
-                        </button>
-                        {openReactionPickerFor === m.id && (
+                        {!selectMode && (
+                          <button
+                            type="button"
+                            className="react-trigger"
+                            onClick={() =>
+                              setOpenReactionPickerFor(
+                                openReactionPickerFor === m.id ? null : m.id,
+                              )
+                            }
+                            aria-label="Add reaction"
+                          >
+                            <svg className="icon" width="18" height="18">
+                              <use href="#emoji-icon" />
+                            </svg>
+                            <span className="react-trigger-badge">+</span>
+                          </button>
+                        )}
+                        {!selectMode && openReactionPickerFor === m.id && (
                           <ReactionPicker
                             anchorClass={
                               "reaction-picker" +
@@ -1866,6 +1901,40 @@ function App() {
             )}
           </main>
         </>
+      )}
+
+      {selectModeGuard && (
+        <div className="modal-overlay" onClick={() => setSelectModeGuard(null)}>
+          <div className="delete-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="delete-sheet-title">
+              {selectModeGuard.kind === "send" ? "Send message?" : "Leave selection?"}
+            </div>
+            <div className="delete-sheet-desc">
+              {selectModeGuard.kind === "send"
+                ? "You're still selecting messages. Sending now will clear your selection."
+                : "You're still selecting messages. Leaving now will clear your selection."}
+            </div>
+            <button
+              type="button"
+              className="delete-sheet-btn delete-sheet-danger"
+              onClick={() => {
+                const action = selectModeGuard.action;
+                setSelectModeGuard(null);
+                exitSelectMode();
+                action();
+              }}
+            >
+              {selectModeGuard.kind === "send" ? "Send & deselect" : "Leave & deselect"}
+            </button>
+            <button
+              type="button"
+              className="delete-sheet-btn delete-sheet-cancel"
+              onClick={() => setSelectModeGuard(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {deleteSheet && (

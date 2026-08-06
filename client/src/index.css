@@ -2000,7 +2000,7 @@ label.modal-user-row {
     max-width: 92%;
   }
   .msg-selectable .msg-content {
-   max-width: 92% !important;
+    max-width: 92%;
   }
   .msg-bubble {
     font-size: 13px;
@@ -2181,6 +2181,13 @@ label.modal-user-row {
   font-weight: 600;
   margin-bottom: 6px;
   text-align: center;
+}
+.delete-sheet-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 6px;
+  line-height: 1.4;
 }
 .delete-sheet-btn {
   padding: 11px 14px;
