@@ -2000,7 +2000,7 @@ label.modal-user-row {
     max-width: 92%;
   }
   .msg-selectable .msg-content {
-   max-width: 92%;
+   max-width: 92% !important;
   }
   .msg-bubble {
     font-size: 13px;
