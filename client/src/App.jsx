@@ -16,7 +16,6 @@ import GameOverlay from "./GameOverlay.jsx";
 import PollComposer from "./PollComposer.jsx";
 import PollCard from "./PollCard.jsx";
 import GameHistory from "./GameHistory.jsx";
-import AdminPage from "./AdminPage.jsx";
 
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ||
@@ -78,7 +77,6 @@ function App() {
   const [tagline, setTagline] = useState("");
   const [themeColor, setThemeColor] = useState("violet");
   const [showOnline, setShowOnline] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [activeView, setActiveView] = useState("chats"); // "chats" | "profile" | "groups" | "contacts" | "settings"
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem("mf_theme_mode") !== "light",
@@ -403,7 +401,6 @@ function App() {
         wallpapers: serverWallpapers,
         hiddenMessageIds,
         clearedChats,
-        isAdmin: adminFlag,
       }) => {
         setLoginError("");
         setResuming(false);
@@ -414,7 +411,6 @@ function App() {
         setTagline(tl || "");
         setThemeColor(tc || "violet");
         setShowOnline(so !== false);
-        setIsAdmin(!!adminFlag);
         setWallpapers(serverWallpapers || {});
         setHiddenMsgIds(new Set(hiddenMessageIds || []));
         const clearedTimestamps = {};
@@ -934,7 +930,6 @@ function App() {
     setAvatarUrl(null);
     setTagline("");
     setThemeColor("violet");
-    setIsAdmin(false);
     setConversations([]);
     setMessagesByConv({});
     setActiveConvId(null);
@@ -1204,18 +1199,6 @@ function App() {
             <use href="#contacts-icon" />
           </svg>
         </button>
-        {isAdmin && (
-          <button
-            type="button"
-            className={"rail-btn" + (activeView === "admin" ? " active" : "")}
-            title="Admin"
-            onClick={() => runOrConfirmLeaveSelect(() => setActiveView("admin"))}
-          >
-            <svg className="icon" width="22" height="22">
-              <use href="#admin-icon" />
-            </svg>
-          </button>
-        )}
         <div className="rail-spacer" />
         <button
           type="button"
@@ -1291,8 +1274,6 @@ function App() {
           onNewChat={() => setShowNewChat(true)}
           mediaSrc={mediaSrc}
         />
-      ) : activeView === "admin" && isAdmin ? (
-        <AdminPage serverUrl={SERVER_URL} token={tokenRef.current} mediaSrc={mediaSrc} />
       ) : (
         <>
           <aside className="sidebar">

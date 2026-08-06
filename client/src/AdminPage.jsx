@@ -4,6 +4,11 @@ function initials(name) {
   return (name || "?").trim().slice(0, 2).toUpperCase();
 }
 
+function avatarSrc(serverUrl, url) {
+  if (!url) return null;
+  return url.startsWith("http") ? url : `${serverUrl}${url}`;
+}
+
 function timeAgo(ts) {
   if (!ts) return "never";
   const diffMs = Date.now() - new Date(ts).getTime();
@@ -19,7 +24,7 @@ function timeAgo(ts) {
 // Admin-only: lists every registered account and how it's currently connected
 // (online/offline, transport, IP, session count). Deliberately shows nothing
 // about conversations or message content — that stays private.
-export default function AdminPage({ serverUrl, token, mediaSrc }) {
+export default function AdminPage({ serverUrl, token, adminEmail, onLogout }) {
   const [users, setUsers] = useState(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -32,9 +37,8 @@ export default function AdminPage({ serverUrl, token, mediaSrc }) {
       const res = await fetch(`${serverUrl}/api/admin/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.status === 403) {
-        setError("Your account doesn't have admin access.");
-        setUsers([]);
+      if (res.status === 401 || res.status === 403) {
+        onLogout?.("Your admin session expired. Please log in again.");
         return;
       }
       if (!res.ok) throw new Error("Failed to load users");
@@ -61,14 +65,20 @@ export default function AdminPage({ serverUrl, token, mediaSrc }) {
   const onlineCount = (users || []).filter((u) => u.online).length;
 
   return (
-    <div className="admin-page">
-      <div className="panel-header">
+    <div className="admin-page admin-page-standalone">
+      <div className="panel-header admin-topbar">
         <h2>Admin — Users</h2>
-        <button type="button" onClick={load} title="Refresh" aria-label="Refresh">
-          <svg className="icon" width="16" height="16">
-            <use href="#refresh-icon" />
-          </svg>
-        </button>
+        <div className="admin-topbar-actions">
+          <span className="admin-topbar-email">{adminEmail}</span>
+          <button type="button" onClick={load} title="Refresh" aria-label="Refresh">
+            <svg className="icon" width="16" height="16">
+              <use href="#refresh-icon" />
+            </svg>
+          </button>
+          <button type="button" onClick={() => onLogout?.()} className="admin-logout-btn">
+            Log out
+          </button>
+        </div>
       </div>
 
       <div className="panel-search">
@@ -99,17 +109,14 @@ export default function AdminPage({ serverUrl, token, mediaSrc }) {
             <div key={u.id} className="admin-row">
               <span className="avatar admin-avatar">
                 {u.avatarUrl ? (
-                  <img src={mediaSrc ? mediaSrc(u.avatarUrl) : u.avatarUrl} alt="" />
+                  <img src={avatarSrc(serverUrl, u.avatarUrl)} alt="" />
                 ) : (
                   initials(u.username)
                 )}
                 <span className={"admin-dot" + (u.online ? " admin-dot-online" : "")} />
               </span>
               <div className="admin-row-main">
-                <div className="admin-row-name">
-                  {u.username}
-                  {u.isAdmin && <span className="admin-badge">Admin</span>}
-                </div>
+                <div className="admin-row-name">{u.username}</div>
                 <div className="admin-row-sub">{u.phoneNumber}</div>
                 {u.tagline && <div className="admin-row-tagline">{u.tagline}</div>}
               </div>

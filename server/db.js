@@ -52,10 +52,6 @@ export async function initDb() {
   // the original 20 chars). No-op if the column is already wide enough.
   await query(`ALTER TABLE users ALTER COLUMN theme_color TYPE VARCHAR(60)`);
 
-  // Global admin flag (separate from conversation_members.is_admin, which is only
-  // per-group). Lets a small set of accounts see the admin user directory.
-  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin SMALLINT NOT NULL DEFAULT 0`);
-
   // A conversation is either a 1:1 "direct" chat or a named "group" chat.
   await query(`
     CREATE TABLE IF NOT EXISTS conversations (
@@ -186,7 +182,37 @@ export async function initDb() {
     )
   `);
 
+  // Dedicated admin accounts — completely separate from the `users` table (chat
+  // accounts). Logging in at /admin issues its own token and never touches
+  // conversations or messages.
+  await query(`
+    CREATE TABLE IF NOT EXISTS admins (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(120) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   console.log("PostgreSQL: tables ready");
+}
+
+// --- Admin accounts ---
+
+export async function getAdminByEmail(email) {
+  const [rows] = await query(
+    "SELECT id, email, password_hash AS \"passwordHash\" FROM admins WHERE email = ?",
+    [email]
+  );
+  return rows[0] || null;
+}
+
+// Idempotent: creates the admin row only if that email doesn't exist yet, so it's
+// safe to call on every server start.
+export async function ensureAdminExists(email, passwordHash) {
+  const existing = await getAdminByEmail(email);
+  if (existing) return;
+  await query("INSERT INTO admins (email, password_hash) VALUES (?, ?)", [email, passwordHash]);
 }
 
 // --- Game history ---
@@ -283,7 +309,7 @@ export async function createUser(phoneNumber, username, passwordHash) {
 // never send this row to a client as-is.
 export async function getUserWithPasswordByPhone(phoneNumber) {
   const [rows] = await query(
-    "SELECT id, phone_number, username, password_hash, avatar_url, tagline, theme_color, show_online, is_admin FROM users WHERE phone_number = ?",
+    "SELECT id, phone_number, username, password_hash, avatar_url, tagline, theme_color, show_online FROM users WHERE phone_number = ?",
     [phoneNumber]
   );
   return rows[0] || null;
@@ -327,12 +353,12 @@ export async function updateUserProfile(userId, { username, tagline, avatarUrl, 
 export async function getUserById(userId) {
   const [rows] = await query(
     `SELECT id, phone_number AS "phoneNumber", username, avatar_url AS "avatarUrl",
-            tagline, theme_color AS "themeColor", show_online AS "showOnline", is_admin AS "isAdmin"
+            tagline, theme_color AS "themeColor", show_online AS "showOnline"
      FROM users WHERE id = ?`,
     [userId]
   );
   if (!rows[0]) return null;
-  return { ...rows[0], showOnline: !!rows[0].showOnline, isAdmin: !!rows[0].isAdmin };
+  return { ...rows[0], showOnline: !!rows[0].showOnline };
 }
 
 // --- Users ---
@@ -349,16 +375,10 @@ export async function listUsers() {
 export async function listUsersForAdmin() {
   const [rows] = await query(
     `SELECT id, phone_number AS "phoneNumber", username, avatar_url AS "avatarUrl",
-            tagline, is_admin AS "isAdmin", created_at AS "createdAt", last_seen AS "lastSeen"
+            tagline, created_at AS "createdAt", last_seen AS "lastSeen"
      FROM users ORDER BY username`
   );
-  return rows.map((r) => ({ ...r, isAdmin: !!r.isAdmin }));
-}
-
-// Auto-promotes an account to global admin by phone number (used on login/register so
-// operators can grant access via an env var instead of hand-editing the database).
-export async function setUserAdminByPhone(phoneNumber, isAdmin) {
-  await query("UPDATE users SET is_admin = ? WHERE phone_number = ?", [isAdmin ? 1 : 0, phoneNumber]);
+  return rows;
 }
 
 export async function getUserByPhone(phoneNumber) {

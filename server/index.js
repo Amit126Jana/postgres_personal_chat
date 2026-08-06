@@ -43,7 +43,8 @@ import {
   clearChatForUser,
   getClearedChats,
   listUsersForAdmin,
-  setUserAdminByPhone,
+  getAdminByEmail,
+  ensureAdminExists,
 } from "./db.js";
 import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_PLAYER_GAMES } from "./games.js";
 import { recordGameResult, getGameHistory } from "./db.js";
@@ -77,21 +78,14 @@ function signToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
 }
 
-// Comma-separated phone numbers in server/.env (ADMIN_PHONE_NUMBERS=+1555...,+1555...)
-// are granted the global admin flag on every login/register, so ops can manage admins
-// without touching the database directly.
-const ADMIN_PHONE_NUMBERS = new Set(
-  (process.env.ADMIN_PHONE_NUMBERS || "")
-    .split(",")
-    .map((p) => p.trim())
-    .filter(Boolean)
-);
-async function syncAdminFlag(phoneNumber) {
-  if (ADMIN_PHONE_NUMBERS.size === 0) return;
-  if (ADMIN_PHONE_NUMBERS.has(phoneNumber)) {
-    await setUserAdminByPhone(phoneNumber, true);
-  }
+// Admin tokens carry { adminId, scope: "admin" } instead of { userId }, so they can
+// never be reused against the regular /api or chat-socket routes.
+function signAdminToken(adminId) {
+  return jwt.sign({ adminId, scope: "admin" }, JWT_SECRET, { expiresIn: "12h" });
 }
+
+const DEFAULT_ADMIN_EMAIL = "admin@makefriends.com";
+const DEFAULT_ADMIN_PASSWORD = "Admin@make1234";
 
 const PHONE_REGEX = /^\+?[1-9]\d{9,14}$/;
 const NAME_REGEX = /^[A-Za-z\s.'-]+$/;
@@ -188,9 +182,8 @@ app.post("/api/auth/register", async (req, res) => {
 
     const passwordHash = await bcrypt.hash(result.pass, 10);
     const user = await createUser(result.phone, result.name, passwordHash);
-    await syncAdminFlag(result.phone);
     const token = signToken(user.id);
-    res.status(201).json({ token, user: { ...user, isAdmin: ADMIN_PHONE_NUMBERS.has(result.phone) } });
+    res.status(201).json({ token, user });
   } catch (err) {
     if (err.code === "PHONE_TAKEN") return res.status(409).json({ error: err.message });
     console.error("register failed:", err.message);
@@ -214,7 +207,6 @@ app.post("/api/auth/login", async (req, res) => {
     if (!ok) return res.status(401).json(genericError);
 
     await touchLastSeen(row.id);
-    await syncAdminFlag(row.phone_number);
     const token = signToken(row.id);
     const user = {
       id: row.id,
@@ -224,7 +216,6 @@ app.post("/api/auth/login", async (req, res) => {
       tagline: row.tagline,
       themeColor: row.theme_color,
       showOnline: !!row.show_online,
-      isAdmin: !!row.is_admin || ADMIN_PHONE_NUMBERS.has(row.phone_number),
     };
     res.json({ token, user });
   } catch (err) {
@@ -249,10 +240,21 @@ async function requireAuth(req, res, next) {
   }
 }
 
-// Must run after requireAuth. Blocks anyone whose account isn't flagged is_admin.
-function requireAdmin(req, res, next) {
-  if (!req.user?.isAdmin) return res.status(403).json({ error: "Admin access required" });
-  next();
+// Verifies a bearer JWT issued by /api/admin/login (scope: "admin"). Completely
+// separate from requireAuth/req.user — admin tokens can't be used on chat routes
+// and chat-user tokens can't be used here.
+async function requireAdminAuth(req, res, next) {
+  try {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    if (!token) return res.status(401).json({ error: "Missing admin token" });
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (payload.scope !== "admin") return res.status(403).json({ error: "Not an admin token" });
+    req.admin = { id: payload.adminId };
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid or expired admin token" });
+  }
 }
 
 // --- REST: users & conversations (used to populate "new chat" / "new group" UI) ---
@@ -264,9 +266,27 @@ app.get("/api/users", requireAuth, async (_req, res) => {
   }
 });
 
-// --- Admin: full user directory with live connection info. No conversation/message
-// data is ever included here — deliberately, since chat content is private. ---
-app.get("/api/admin/users", requireAuth, requireAdmin, async (_req, res) => {
+// --- Admin auth & directory (completely separate account system from chat users) ---
+app.post("/api/admin/login", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+    const genericError = { error: "Invalid email or password" };
+    if (!email || !password) return res.status(400).json(genericError);
+
+    const admin = await getAdminByEmail(email);
+    if (!admin) return res.status(401).json(genericError);
+    const ok = await bcrypt.compare(password, admin.passwordHash);
+    if (!ok) return res.status(401).json(genericError);
+
+    const token = signAdminToken(admin.id);
+    res.json({ token, admin: { id: admin.id, email: admin.email } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/admin/users", requireAdminAuth, async (_req, res) => {
   try {
     const users = await listUsersForAdmin();
     const byUserId = new Map();
@@ -497,7 +517,6 @@ io.on("connection", async (socket) => {
       tagline: user.tagline,
       themeColor: user.themeColor,
       showOnline: user.showOnline,
-      isAdmin: user.isAdmin,
       wallpapers,
       hiddenMessageIds,
       clearedChats,
@@ -1127,7 +1146,9 @@ io.on("connection", async (socket) => {
 });
 
 initDb()
-  .then(() => {
+  .then(async () => {
+    const defaultAdminHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
+    await ensureAdminExists(DEFAULT_ADMIN_EMAIL, defaultAdminHash);
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`Chat server listening on http://0.0.0.0:${PORT} (reachable on your LAN)`);
     });
