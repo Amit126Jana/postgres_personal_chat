@@ -237,6 +237,7 @@ async function requireAuth(req, res, next) {
     const user = await getUserById(payload.userId);
     if (!user) return res.status(401).json({ error: "Invalid token" });
     req.user = user;
+    console.log("DEBUG requireAuth user id:", user.id, typeof user.id);
     next();
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });
