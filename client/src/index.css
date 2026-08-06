@@ -1948,6 +1948,66 @@ label.modal-user-row {
   }
 }
 
+@media (max-width: 480px) {
+  .app {
+    grid-template-columns: 64px 1fr;
+  }
+  .icon-rail {
+    width: 64px;
+  }
+  .room-label {
+    padding: 10px 8px;
+    gap: 6px;
+    font-size: 14px;
+    flex-wrap: nowrap;
+  }
+  .room-title-text {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .room-avatar,
+  .mobile-back-btn {
+    flex: 0 0 auto;
+  }
+  .conv-badge {
+    display: none;
+  }
+  .room-label .group-call-header-btn {
+    padding: 6px 8px;
+    gap: 2px;
+    flex: 0 0 auto;
+  }
+  .room-label .header-btn-label {
+    display: none;
+  }
+  .chat-menu-wrap {
+    flex: 0 0 auto;
+    margin-left: 4px;
+  }
+  .chat-menu-dropdown {
+    min-width: 160px;
+  }
+  .select-toolbar-count {
+    font-size: 13px;
+  }
+  .feed {
+    padding: 14px 12px;
+  }
+  .msg {
+    max-width: 82%;
+  }
+  .msg-selectable .msg-content {
+    max-width: 76%;
+  }
+  .delete-sheet,
+  .wallpaper-modal {
+    width: 92vw;
+  }
+}
+
 /* --- In-chat mini games --- */
 .game-status-line {
   font-weight: 600;

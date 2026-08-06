@@ -1400,7 +1400,7 @@ function App() {
                       }}
                     />
                   )}
-                  {activeConv.name}
+                  <span className="room-title-text">{activeConv.name}</span>
                   {activeConv.type === "group" && (
                     <span className="conv-badge">                      {activeConv.members?.length || 0} members
                     </span>
@@ -1421,7 +1421,7 @@ function App() {
                       <svg className="icon" width="16" height="16">
                         <use href="#video-call-icon" />
                       </svg>
-                      Group call
+                      <span className="header-btn-label">Group call</span>
                     </button>
                   )}
                   {activeConv.type === "direct" && (
@@ -1431,7 +1431,7 @@ function App() {
                       title="Play a game together"
                       onClick={() => setShowGamesMenu(true)}
                     >
-                      🎮 Games
+                      🎮 <span className="header-btn-label">Games</span>
                     </button>
                   )}
                   <button
@@ -1440,7 +1440,7 @@ function App() {
                     title="Create a poll"
                     onClick={() => setShowPollComposer(true)}
                   >
-                    📊 Poll
+                    📊 <span className="header-btn-label">Poll</span>
                   </button>
                   {openMsgMenuFor &&
                     (() => {
