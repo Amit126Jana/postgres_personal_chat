@@ -24,11 +24,14 @@ function timeAgo(ts) {
 // Admin-only: lists every registered account and how it's currently connected
 // (online/offline, transport, IP, session count). Deliberately shows nothing
 // about conversations or message content — that stays private.
-export default function AdminPage({ serverUrl, token, adminEmail, onLogout }) {
+// `onLogout`/`adminEmail` are optional — when embedded inside the chat app they're
+// omitted and the panel just renders as a normal in-app section.
+export default function AdminPage({ serverUrl, token, adminEmail, onLogout, mediaSrc, standalone = false }) {
   const [users, setUsers] = useState(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const resolveAvatar = mediaSrc || ((url) => avatarSrc(serverUrl, url));
 
   async function load() {
     setLoading(true);
@@ -38,7 +41,8 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 401 || res.status === 403) {
-        onLogout?.("Your admin session expired. Please log in again.");
+        if (onLogout) onLogout("Your admin session expired. Please log in again.");
+        else setError("You don't have admin access.");
         return;
       }
       if (!res.ok) throw new Error("Failed to load users");
@@ -65,19 +69,21 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout }) {
   const onlineCount = (users || []).filter((u) => u.online).length;
 
   return (
-    <div className="admin-page admin-page-standalone">
+    <div className={"admin-page" + (standalone ? " admin-page-standalone" : "")}>
       <div className="panel-header admin-topbar">
         <h2>Admin — Users</h2>
         <div className="admin-topbar-actions">
-          <span className="admin-topbar-email">{adminEmail}</span>
+          {adminEmail && <span className="admin-topbar-email">{adminEmail}</span>}
           <button type="button" onClick={load} title="Refresh" aria-label="Refresh">
             <svg className="icon" width="16" height="16">
               <use href="#refresh-icon" />
             </svg>
           </button>
-          <button type="button" onClick={() => onLogout?.()} className="admin-logout-btn">
-            Log out
-          </button>
+          {onLogout && (
+            <button type="button" onClick={() => onLogout()} className="admin-logout-btn">
+              Log out
+            </button>
+          )}
         </div>
       </div>
 
@@ -109,7 +115,7 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout }) {
             <div key={u.id} className="admin-row">
               <span className="avatar admin-avatar">
                 {u.avatarUrl ? (
-                  <img src={avatarSrc(serverUrl, u.avatarUrl)} alt="" />
+                  <img src={resolveAvatar(u.avatarUrl)} alt="" />
                 ) : (
                   initials(u.username)
                 )}
