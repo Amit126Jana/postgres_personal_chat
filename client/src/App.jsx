@@ -1584,6 +1584,7 @@ function App() {
                           {isSelected ? "✓" : ""}
                         </span>
                       )}
+                      <div className="msg-content">
                       <div className="msg-meta">
                         <span className="msg-user">{m.username}</span>
                         <span className="msg-time">
@@ -1792,6 +1793,7 @@ function App() {
                           })}
                         </div>
                       )}
+                      </div>
                     </div>
                     );
                   })}

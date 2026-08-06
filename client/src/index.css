@@ -1959,15 +1959,28 @@ label.modal-user-row {
   cursor: pointer;
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   max-width: 100%;
+  width: 100%;
+  align-self: stretch !important;
+  padding: 4px 8px;
+  border-radius: 12px;
+  transition: background 0.12s ease;
 }
 .msg-selectable.mine {
-  flex-direction: row-reverse;
+  flex-direction: row;
 }
-.msg-selectable > .msg-row,
-.msg-selectable > .msg-meta {
-  flex: 1;
+.msg-selectable .msg-content {
+  display: flex;
+  flex-direction: column;
+  max-width: 62%;
+}
+.msg-selectable.mine .msg-content {
+  margin-left: auto;
+  align-items: flex-end;
+}
+.msg-selectable:not(.mine) .msg-content {
+  align-items: flex-start;
 }
 .msg-select-checkbox {
   flex: 0 0 auto;
@@ -1979,6 +1992,7 @@ label.modal-user-row {
   align-items: center;
   justify-content: center;
   font-size: 12px;
+  font-weight: 700;
   color: #fff;
   background: transparent;
 }
@@ -1987,8 +2001,7 @@ label.modal-user-row {
   border-color: var(--signal);
 }
 .msg-row-selected {
-  background: rgba(var(--signal-rgb), 0.12);
-  border-radius: 12px;
+  background: rgba(var(--signal-rgb), 0.14);
 }
 
 .select-toolbar {
@@ -1999,6 +2012,11 @@ label.modal-user-row {
 .select-toolbar-count {
   flex: 1;
   font-weight: 600;
+  color: var(--text);
+}
+.select-toolbar .group-call-header-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .chat-menu-wrap {
