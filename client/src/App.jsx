@@ -107,6 +107,7 @@ function App() {
   const [playingReaction, setPlayingReaction] = useState(null); // { kind: "voice"|"video", url }
   const [showNewChat, setShowNewChat] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [mobileChatOpen, setMobileChatOpen] = useState(false); // narrow-screen nav: list vs conversation
 
   // --- Multi-select / delete-for-me / clear chat / wallpapers ---
@@ -941,25 +942,70 @@ function App() {
     socket.emit("game:forfeit", { conversationId: activeConvId });
   }
 
-  async function handleFilePicked(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !activeConvId) return;
+  async function sendFilesAsMessages(files) {
+    if (!files || files.length === 0 || !activeConvId) return;
     setUploading(true);
     try {
-      const { mediaUrl, mediaName, type } = await uploadFile(file);
-      socket.emit("message", {
-        conversationId: activeConvId,
-        type,
-        mediaUrl,
-        mediaName,
-      });
-    } catch (err) {
-      console.error("Upload failed", err);
-      alert("Media upload failed. Please try a smaller file (max 25MB).");
+      // Sequential (not parallel) so messages land in the order the files were picked,
+      // and so one huge upload doesn't starve the others on a slow connection.
+      for (const file of files) {
+        try {
+          const { mediaUrl, mediaName, type } = await uploadFile(file);
+          socket.emit("message", {
+            conversationId: activeConvId,
+            type,
+            mediaUrl,
+            mediaName,
+          });
+        } catch (err) {
+          console.error("Upload failed", err);
+          alert(`Couldn't send "${file.name || "file"}". Please try a smaller file (max 25MB).`);
+        }
+      }
     } finally {
       setUploading(false);
     }
+  }
+
+  async function handleFilePicked(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await sendFilesAsMessages([file]);
+  }
+
+  // Pasting an image/video/audio/file (e.g. Ctrl+V after copying an image) straight
+  // into the message input sends it as media, same as using the attach button.
+  function handleComposerPaste(e) {
+    const items = e.clipboardData?.items;
+    if (!items || !activeConvId) return;
+    const files = Array.from(items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter(Boolean);
+    if (files.length === 0) return; // plain text paste — let the browser handle it normally
+    e.preventDefault();
+    sendFilesAsMessages(files);
+  }
+
+  // Dragging a file in from the OS (e.g. a folder window) anywhere over the chat pane.
+  function handleFeedDragOver(e) {
+    e.preventDefault();
+    if (e.dataTransfer.types?.includes("Files")) setIsDraggingFile(true);
+  }
+
+  function handleFeedDragLeave(e) {
+    // Only clear when actually leaving the pane, not when moving between its children.
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setIsDraggingFile(false);
+  }
+
+  function handleFeedDrop(e) {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0 || !activeConvId) return;
+    sendFilesAsMessages(files);
   }
 
   function startDirectChat(otherUserId) {
@@ -1502,7 +1548,34 @@ function App() {
             </div>
           </aside>
 
-          <main className="feed-col">
+          <main
+            className="feed-col"
+            onDragOver={handleFeedDragOver}
+            onDragLeave={handleFeedDragLeave}
+            onDrop={handleFeedDrop}
+            style={{ position: "relative" }}
+          >
+            {isDraggingFile && activeConv && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 50,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(0,0,0,0.55)",
+                  border: "3px dashed #fff",
+                  borderRadius: "8px",
+                  color: "#fff",
+                  fontSize: "18px",
+                  fontWeight: 600,
+                  pointerEvents: "none",
+                }}
+              >
+                Drop to send
+              </div>
+            )}
             {!activeConv ? (
               <div className="empty-state">
                 Pick a chat, or start a new one.
@@ -2038,6 +2111,7 @@ function App() {
                     placeholder="send a line…"
                     value={draft}
                     onChange={handleDraftChange}
+                    onPaste={handleComposerPaste}
                     maxLength={2000}
                   />
                   <button
