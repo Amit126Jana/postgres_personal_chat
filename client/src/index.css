@@ -2341,6 +2341,259 @@ label.modal-user-row {
 .modal-group-form button[type="submit"]:hover:not(:disabled) {
   filter: brightness(1.08);
 }
+
+/* ---------------- New Chat / New Group side panel (template redesign) ---------------- */
+.np-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 8, 16, 0.55);
+  z-index: 200;
+  display: flex;
+  justify-content: flex-end;
+  animation: np-fade-in 0.18s ease;
+}
+@keyframes np-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.np-panel {
+  width: 420px;
+  max-width: 100%;
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow);
+  animation: np-slide-in 0.22s ease;
+}
+@keyframes np-slide-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.np-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.np-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text);
+}
+.np-subtitle {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.np-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.np-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.np-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px 0;
+}
+.np-tab {
+  flex: 1;
+  padding: 9px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 13px;
+}
+.np-tab.active {
+  background: var(--signal-gradient, var(--signal));
+  color: #fff;
+  border-color: transparent;
+}
+.np-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px 8px;
+}
+.np-avatar-upload {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  margin: 4px auto 20px;
+}
+.np-avatar-circle {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: var(--signal-gradient, var(--signal));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  opacity: 0.9;
+  cursor: pointer;
+}
+.np-avatar-plus {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--signal);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  border: 2px solid var(--surface);
+}
+.np-field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+.np-input {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13.5px;
+  margin-bottom: 16px;
+  outline: none;
+}
+.np-input:focus {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 3px rgba(var(--signal-rgb), 0.18);
+}
+.np-search-wrap {
+  position: relative;
+}
+.np-search-wrap-direct {
+  margin-bottom: 6px;
+}
+.np-search-input {
+  padding-right: 38px;
+}
+.np-search-icon {
+  position: absolute;
+  right: 13px;
+  top: 12px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.np-user-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.np-user-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.np-user-row:hover {
+  background: var(--surface-2);
+}
+.np-user-row.checked {
+  background: rgba(var(--signal-rgb), 0.1);
+}
+.np-user-avatar {
+  flex-shrink: 0;
+}
+.np-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.np-user-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.np-user-handle {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.np-checkbox {
+  margin-left: auto;
+  width: 19px;
+  height: 19px;
+  border-radius: 6px;
+  border: 1.5px solid var(--line);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.np-checkbox.checked {
+  background: var(--signal-gradient, var(--signal));
+  border-color: transparent;
+}
+.np-empty {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 13px;
+  padding: 30px 10px;
+}
+.np-footer {
+  padding: 14px 20px 20px;
+  border-top: 1px solid var(--line);
+}
+.np-member-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  text-align: right;
+}
+.np-submit-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  background: var(--signal-gradient, var(--signal));
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+}
+.np-submit-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.np-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+@media (max-width: 640px) {
+  .np-panel {
+    width: 100%;
+  }
+}
 .poll-form input[type="text"] {
   width: 100%;
   box-sizing: border-box;
