@@ -365,7 +365,7 @@ function App() {
 
     pushToast(title, body);
 
-    if (notifPermissionRef.current === "granted" && document.hidden) {
+    if (notifPermissionRef.current === "granted") {
       try {
         new Notification(title, { body });
       } catch {
