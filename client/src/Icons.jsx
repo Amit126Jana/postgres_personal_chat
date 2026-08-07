@@ -4,6 +4,110 @@
 export default function IconSprite() {
   return (
     <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+      <symbol id="lock-icon" viewBox="0 0 24 24">
+        <rect x="5" y="10.5" width="14" height="9" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+        />
+        <circle cx="12" cy="14.7" r="1.3" fill="currentColor" />
+      </symbol>
+
+      <symbol id="bell-icon" viewBox="0 0 24 24">
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M6 10.5a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14.5 6 10.5Z"
+        />
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          d="M10 19a2 2 0 0 0 4 0"
+        />
+      </symbol>
+
+      <symbol id="shield-icon" viewBox="0 0 24 24">
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+          d="M12 3.5 5 6v5.5C5 15.5 8 18.5 12 20.5c4-2 7-5 7-9V6z"
+        />
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M9.3 11.7 11 13.4l3.7-3.9"
+        />
+      </symbol>
+
+      <symbol id="eye-icon" viewBox="0 0 24 24">
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+          d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"
+        />
+        <circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      </symbol>
+
+      <symbol id="laptop-icon" viewBox="0 0 24 24">
+        <rect x="4" y="5.5" width="16" height="10" rx="1.4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          d="M2.5 18.5h19"
+        />
+      </symbol>
+
+      <symbol id="image-icon" viewBox="0 0 24 24">
+        <rect x="3" y="4.5" width="18" height="14" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="8.3" cy="9.3" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+          d="m4 17 5-5 3.5 3.5L16.5 11 20 14.5"
+        />
+      </symbol>
+
+      <symbol id="ban-icon" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          d="m6.3 6.3 11.4 11.4"
+        />
+      </symbol>
+
+      <symbol id="chevron-right-icon" viewBox="0 0 24 24">
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="m9 5.5 7 6.5-7 6.5"
+        />
+      </symbol>
+
       <symbol id="video-call-icon" viewBox="0 0 24 24">
         <path
           fill="none"

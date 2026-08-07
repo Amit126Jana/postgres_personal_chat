@@ -47,6 +47,11 @@ import {
   setUserAdminByPhone,
   setUserStatus,
   deleteUserAccount,
+  blockUser,
+  unblockUser,
+  listBlockedUsers,
+  getPasswordHash,
+  setPasswordHash,
 } from "./db.js";
 import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_PLAYER_GAMES } from "./games.js";
 import { recordGameResult, getGameHistory } from "./db.js";
@@ -222,6 +227,7 @@ app.post("/api/auth/login", async (req, res) => {
       phoneNumber: row.phone_number,
       username: row.username,
       avatarUrl: row.avatar_url,
+      coverUrl: row.cover_url,
       tagline: row.tagline,
       themeColor: row.theme_color,
       showOnline: !!row.show_online,
@@ -279,6 +285,65 @@ app.get("/pusher/beams-auth", requireAuth, (req, res) => {
 app.get("/api/users", requireAuth, async (_req, res) => {
   try {
     res.json(await listUsers());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Self-service account deletion, triggered from the Settings page. Removes the
+// account and (via FK cascade) their conversation memberships, messages, etc.
+app.delete("/api/account", requireAuth, async (req, res) => {
+  try {
+    await deleteUserAccount(req.user.id);
+    kickUserSockets(req.user.id);
+    res.json({ deleted: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Change the logged-in user's password — requires re-entering the current one.
+app.post("/api/account/password", requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (typeof newPassword !== "string" || newPassword.length < 6) {
+      return res.status(400).json({ error: "New password must be at least 6 characters." });
+    }
+    const hash = await getPasswordHash(req.user.id);
+    const ok = hash && (await bcrypt.compare(currentPassword || "", hash));
+    if (!ok) return res.status(401).json({ error: "Current password is incorrect." });
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await setPasswordHash(req.user.id, newHash);
+    res.json({ updated: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Blocked users (Settings > Privacy & Security) ---
+app.get("/api/blocked", requireAuth, async (req, res) => {
+  try {
+    res.json(await listBlockedUsers(req.user.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/blocked/:userId", requireAuth, async (req, res) => {
+  try {
+    const targetId = Number(req.params.userId);
+    if (targetId === req.user.id) return res.status(400).json({ error: "You can't block yourself." });
+    await blockUser(req.user.id, targetId);
+    res.json({ blocked: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/blocked/:userId", requireAuth, async (req, res) => {
+  try {
+    await unblockUser(req.user.id, Number(req.params.userId));
+    res.json({ blocked: false });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -632,6 +697,7 @@ io.on("connection", async (socket) => {
       username: user.username,
       phoneNumber: user.phoneNumber,
       avatarUrl: user.avatarUrl,
+      coverUrl: user.coverUrl,
       tagline: user.tagline,
       themeColor: user.themeColor,
       showOnline: user.showOnline,
@@ -653,7 +719,7 @@ io.on("connection", async (socket) => {
   }
 
   // --- Update profile: name, tagline, avatar, theme color, online-visibility privacy ---
-  socket.on("profile:update", async ({ username, tagline, avatarUrl, themeColor, showOnline }) => {
+  socket.on("profile:update", async ({ username, tagline, avatarUrl, coverUrl, themeColor, showOnline }) => {
     const me = onlineUsers.get(socket.id);
     if (!me) return;
     try {
@@ -668,6 +734,7 @@ io.on("connection", async (socket) => {
       }
       if (typeof tagline === "string") patch.tagline = tagline.trim().slice(0, 140) || null;
       if (typeof avatarUrl === "string") patch.avatarUrl = avatarUrl;
+      if (typeof coverUrl === "string") patch.coverUrl = coverUrl;
       if (typeof themeColor === "string") patch.themeColor = themeColor.slice(0, 60);
       if (typeof showOnline === "boolean") patch.showOnline = showOnline;
 

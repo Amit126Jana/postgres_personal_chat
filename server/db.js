@@ -52,6 +52,9 @@ export async function initDb() {
   // the original 20 chars). No-op if the column is already wide enough.
   await query(`ALTER TABLE users ALTER COLUMN theme_color TYPE VARCHAR(60)`);
 
+  // Optional profile cover/banner image shown behind the avatar on the Settings page.
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_url VARCHAR(500) NULL`);
+
   // Global in-app admin flag (separate from conversation_members.is_admin, which is
   // only per-group). Grants access to the Admin section inside the chat app itself.
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin SMALLINT NOT NULL DEFAULT 0`);
@@ -82,6 +85,16 @@ export async function initDb() {
       is_admin SMALLINT NOT NULL DEFAULT 0,
       joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (conversation_id, user_id)
+    )
+  `);
+
+  // Who a user has blocked, from the Settings > Privacy & Security > Blocked users list.
+  await query(`
+    CREATE TABLE IF NOT EXISTS blocked_users (
+      blocker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (blocker_id, blocked_id)
     )
   `);
 
@@ -256,6 +269,7 @@ function toPublicUser(row) {
     phoneNumber: row.phone_number ?? row.phoneNumber,
     username: row.username,
     avatarUrl: row.avatar_url ?? row.avatarUrl ?? null,
+    coverUrl: row.cover_url ?? row.coverUrl ?? null,
     tagline: row.tagline ?? null,
     themeColor: row.theme_color ?? row.themeColor ?? "violet",
     showOnline: !!(row.show_online ?? row.showOnline),
@@ -290,7 +304,7 @@ export async function createUser(phoneNumber, username, passwordHash) {
 // never send this row to a client as-is.
 export async function getUserWithPasswordByPhone(phoneNumber) {
   const [rows] = await query(
-    "SELECT id, phone_number, username, password_hash, avatar_url, tagline, theme_color, show_online, is_admin, status FROM users WHERE phone_number = ?",
+    "SELECT id, phone_number, username, password_hash, avatar_url, cover_url, tagline, theme_color, show_online, is_admin, status FROM users WHERE phone_number = ?",
     [phoneNumber]
   );
   return rows[0] || null;
@@ -301,7 +315,7 @@ export async function touchLastSeen(userId) {
 }
 
 // Updates whichever profile fields are provided; leaves the rest untouched.
-export async function updateUserProfile(userId, { username, tagline, avatarUrl, themeColor, showOnline }) {
+export async function updateUserProfile(userId, { username, tagline, avatarUrl, coverUrl, themeColor, showOnline }) {
   const sets = [];
   const values = [];
   if (username !== undefined) {
@@ -315,6 +329,10 @@ export async function updateUserProfile(userId, { username, tagline, avatarUrl, 
   if (avatarUrl !== undefined) {
     sets.push("avatar_url = ?");
     values.push(avatarUrl);
+  }
+  if (coverUrl !== undefined) {
+    sets.push("cover_url = ?");
+    values.push(coverUrl);
   }
   if (themeColor !== undefined) {
     sets.push("theme_color = ?");
@@ -334,6 +352,7 @@ export async function updateUserProfile(userId, { username, tagline, avatarUrl, 
 export async function getUserById(userId) {
   const [rows] = await query(
     `SELECT id, phone_number AS "phoneNumber", username, avatar_url AS "avatarUrl",
+            cover_url AS "coverUrl",
             tagline, theme_color AS "themeColor", show_online AS "showOnline", is_admin AS "isAdmin",
             status
      FROM users WHERE id = ?`,
@@ -386,6 +405,48 @@ export async function setUserStatus(userId, status) {
 export async function deleteUserAccount(userId) {
   const [rows] = await query("DELETE FROM users WHERE id = ? RETURNING id", [userId]);
   return rows.length > 0;
+}
+
+// --- Blocked users (Settings > Privacy & Security) ---
+
+export async function blockUser(blockerId, blockedId) {
+  await query(
+    "INSERT INTO blocked_users (blocker_id, blocked_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+    [blockerId, blockedId]
+  );
+}
+
+export async function unblockUser(blockerId, blockedId) {
+  await query("DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?", [blockerId, blockedId]);
+}
+
+export async function listBlockedUsers(blockerId) {
+  const [rows] = await query(
+    `SELECT u.id, u.username, u.phone_number AS "phoneNumber", u.avatar_url AS "avatarUrl"
+     FROM blocked_users b JOIN users u ON u.id = b.blocked_id
+     WHERE b.blocker_id = ? ORDER BY u.username`,
+    [blockerId]
+  );
+  return rows;
+}
+
+export async function isBlocked(blockerId, blockedId) {
+  const [rows] = await query(
+    "SELECT 1 FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?",
+    [blockerId, blockedId]
+  );
+  return rows.length > 0;
+}
+
+// --- Password change (Settings > Account) ---
+
+export async function getPasswordHash(userId) {
+  const [rows] = await query("SELECT password_hash FROM users WHERE id = ?", [userId]);
+  return rows[0]?.password_hash || null;
+}
+
+export async function setPasswordHash(userId, passwordHash) {
+  await query("UPDATE users SET password_hash = ? WHERE id = ?", [passwordHash, userId]);
 }
 
 export async function getUserByPhone(phoneNumber) {

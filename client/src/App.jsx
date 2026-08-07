@@ -77,6 +77,7 @@ function App() {
 
   // --- Profile / account ---
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [coverUrl, setCoverUrl] = useState(null);
   const [tagline, setTagline] = useState("");
   const [themeColor, setThemeColor] = useState("violet");
   const [showOnline, setShowOnline] = useState(true);
@@ -463,6 +464,7 @@ function App() {
         username: confirmedName,
         phoneNumber: confirmedPhone,
         avatarUrl: aUrl,
+        coverUrl: cUrl,
         tagline: tl,
         themeColor: tc,
         showOnline: so,
@@ -477,6 +479,7 @@ function App() {
         setUsername(confirmedName);
         setPhoneNumber(confirmedPhone);
         setAvatarUrl(aUrl || null);
+        setCoverUrl(cUrl || null);
         setTagline(tl || "");
         setThemeColor(tc || "violet");
         setShowOnline(so !== false);
@@ -505,12 +508,14 @@ function App() {
       ({
         username: uName,
         avatarUrl: aUrl,
+        coverUrl: cUrl,
         tagline: tl,
         themeColor: tc,
         showOnline: so,
       }) => {
         setUsername(uName);
         setAvatarUrl(aUrl || null);
+        setCoverUrl(cUrl || null);
         setTagline(tl || "");
         setThemeColor(tc || "violet");
         setShowOnline(so !== false);
@@ -1131,6 +1136,22 @@ function App() {
     });
   }
 
+  async function handleDeleteAccount() {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/account`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tokenRef.current}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not delete your account.");
+      }
+      logout();
+    } catch (err) {
+      pushToast("Couldn't delete account", err.message || "Please try again.");
+    }
+  }
+
   async function handleAvatarUpload(file) {
     setAvatarUploading(true);
     try {
@@ -1139,6 +1160,20 @@ function App() {
       socket.emit("profile:update", { avatarUrl: fullUrl });
     } catch (err) {
       console.error("Avatar upload failed", err);
+      pushToast("Upload failed", "Please try a smaller image.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
+  async function handleCoverUpload(file) {
+    setAvatarUploading(true);
+    try {
+      const { mediaUrl } = await uploadFile(file);
+      const fullUrl = mediaSrc(mediaUrl);
+      socket.emit("profile:update", { coverUrl: fullUrl });
+    } catch (err) {
+      console.error("Cover upload failed", err);
       pushToast("Upload failed", "Please try a smaller image.");
     } finally {
       setAvatarUploading(false);
@@ -1531,6 +1566,7 @@ function App() {
             username,
             phoneNumber,
             avatarUrl,
+            coverUrl,
             tagline,
             themeColor,
             showOnline,
@@ -1540,9 +1576,14 @@ function App() {
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode((v) => !v)}
           onUploadAvatar={handleAvatarUpload}
+          onUploadCover={handleCoverUpload}
           onSave={saveProfile}
           onLogout={logout}
+          onDeleteAccount={handleDeleteAccount}
           onClose={() => setActiveView("chats")}
+          serverUrl={SERVER_URL}
+          token={tokenRef.current}
+          mediaSrc={mediaSrc}
         />
       ) : activeView === "profile" ? (
         <ProfilePage
