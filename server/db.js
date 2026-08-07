@@ -507,6 +507,12 @@ function canAdminDelete(message) {
   return Date.now() - new Date(message.createdAt).getTime() <= ADMIN_DELETE_WINDOW_MS;
 }
 
+// Used to know who to notify when someone reacts to a message.
+export async function getMessageOwner(messageId) {
+  const [rows] = await query("SELECT user_id AS \"userId\" FROM messages WHERE id = ?", [messageId]);
+  return rows[0]?.userId ?? null;
+}
+
 export async function addMessage({ conversationId, userId, type, text, mediaUrl, mediaName }) {
   const [inserted] = await query(
     `INSERT INTO messages (conversation_id, user_id, type, text, media_url, media_name)

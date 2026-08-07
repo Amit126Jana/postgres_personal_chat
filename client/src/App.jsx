@@ -109,6 +109,7 @@ function App() {
   const [uploading, setUploading] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]); // [{ id, file, previewUrl, kind }] staged, not yet sent
+  const [pendingPreview, setPendingPreview] = useState(null); // staged file currently shown large, or null
   const [mobileChatOpen, setMobileChatOpen] = useState(false); // narrow-screen nav: list vs conversation
 
   // --- Multi-select / delete-for-me / clear chat / wallpapers ---
@@ -196,6 +197,7 @@ function App() {
       prev.forEach((p) => p.previewUrl && URL.revokeObjectURL(p.previewUrl));
       return [];
     });
+    setPendingPreview(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConvId]);
 
@@ -396,6 +398,33 @@ function App() {
             : msg.type === "audio"
               ? "🎤 sent audio"
               : "📎 sent a file";
+
+    pushToast(title, body);
+
+    if (notifPermissionRef.current === "granted") {
+      try {
+        new Notification(title, { body });
+      } catch {
+        // ignore — some browsers restrict Notification outside a user gesture
+      }
+    }
+  }
+
+  // Reaction "emoji" values can carry a kind prefix (see ReactionPicker), e.g.
+  // "voice:<url>" or "video:<url>" for sticker-style audio/video reactions,
+  // plain emoji/sticker characters otherwise.
+  function labelForReactionKey(key) {
+    const sepIdx = key.indexOf(":");
+    const kind = sepIdx === -1 ? "emoji" : key.slice(0, sepIdx);
+    if (kind === "voice") return "🎙️ a voice reaction";
+    if (kind === "video") return "🎥 a video reaction";
+    return key; // plain emoji or sticker character
+  }
+
+  function notifyReaction({ conversationId, emoji, fromUsername }) {
+    const conv = conversationsRef.current.find((c) => c.id === conversationId);
+    const title = conv?.type === "group" ? `${fromUsername} in ${conv.name}` : fromUsername;
+    const body = `reacted ${labelForReactionKey(emoji)} to your message`;
 
     pushToast(title, body);
 
@@ -674,6 +703,11 @@ function App() {
         }
         return next;
       });
+    });
+
+    // Someone reacted (emoji, sticker, voice, or video reaction) to one of my messages.
+    socket.on("reaction:notify", (payload) => {
+      notifyReaction(payload);
     });
 
     // --- Call signaling ---
@@ -989,6 +1023,7 @@ function App() {
       if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
       return prev.filter((p) => p.id !== id);
     });
+    setPendingPreview((prev) => (prev?.id === id ? null : prev));
   }
 
   function clearPendingFiles() {
@@ -996,6 +1031,7 @@ function App() {
       prev.forEach((p) => p.previewUrl && URL.revokeObjectURL(p.previewUrl));
       return [];
     });
+    setPendingPreview(null);
   }
 
   // Actually uploads + sends every staged file, in the order they were added.
@@ -2149,8 +2185,14 @@ function App() {
                           justifyContent: "center",
                           fontSize: "11px",
                           textAlign: "center",
+                          cursor: p.kind === "image" || p.kind === "video" ? "pointer" : "default",
                         }}
                         title={p.file.name}
+                        onClick={() => {
+                          if (p.kind === "image" || p.kind === "video") setPendingPreview(p);
+                        }}
+                        role={p.kind === "image" || p.kind === "video" ? "button" : undefined}
+                        tabIndex={p.kind === "image" || p.kind === "video" ? 0 : undefined}
                       >
                         {p.kind === "image" && (
                           <img src={p.previewUrl} alt={p.file.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -2162,7 +2204,10 @@ function App() {
                         {p.kind === "file" && <span style={{ padding: "4px" }}>📎 {p.file.name.slice(0, 10)}</span>}
                         <button
                           type="button"
-                          onClick={() => removePendingFile(p.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removePendingFile(p.id);
+                          }}
                           aria-label={`Remove ${p.file.name}`}
                           style={{
                             position: "absolute",
@@ -2248,6 +2293,46 @@ function App() {
             )}
           </main>
         </>
+      )}
+
+      {pendingPreview && (
+        <div className="modal-overlay" onClick={() => setPendingPreview(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: "90vw",
+              maxHeight: "85vh",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "10px",
+            }}
+          >
+            {pendingPreview.kind === "image" && (
+              <img
+                src={pendingPreview.previewUrl}
+                alt={pendingPreview.file.name}
+                style={{ maxWidth: "90vw", maxHeight: "75vh", borderRadius: "8px", objectFit: "contain" }}
+              />
+            )}
+            {pendingPreview.kind === "video" && (
+              <video
+                src={pendingPreview.previewUrl}
+                controls
+                autoPlay
+                style={{ maxWidth: "90vw", maxHeight: "75vh", borderRadius: "8px" }}
+              />
+            )}
+            <div style={{ color: "#fff", fontSize: "13px" }}>{pendingPreview.file.name}</div>
+            <button
+              type="button"
+              className="delete-sheet-btn"
+              onClick={() => setPendingPreview(null)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
 
       {selectModeGuard && (
