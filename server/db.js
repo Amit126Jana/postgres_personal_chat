@@ -525,10 +525,22 @@ export async function updateMessageText(messageId, text) {
   return rows[0];
 }
 
-export async function getMessages(conversationId, limit = 50) {
+// Fetches the most recent `limit` messages, or — when `beforeMessageId` is given —
+// the `limit` messages immediately preceding that message (for "load older on
+// scroll up" pagination). Always returns oldest-first, ready to render/prepend.
+export async function getMessages(conversationId, limit = 50, beforeMessageId = null) {
+  const params = [conversationId];
+  let cursorClause = "";
+  if (beforeMessageId) {
+    // Compare by the cursor message's created_at rather than id, since ids aren't
+    // guaranteed to be strictly time-ordered under concurrent inserts.
+    cursorClause = " AND m.created_at < (SELECT created_at FROM messages WHERE id = ?)";
+    params.push(beforeMessageId);
+  }
+  params.push(limit);
   const [rows] = await query(
-    `${MESSAGE_SELECT} WHERE m.conversation_id = ? ORDER BY m.created_at DESC LIMIT ?`,
-    [conversationId, limit]
+    `${MESSAGE_SELECT} WHERE m.conversation_id = ?${cursorClause} ORDER BY m.created_at DESC LIMIT ?`,
+    params
   );
   return rows.reverse();
 }

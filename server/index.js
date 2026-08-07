@@ -317,7 +317,9 @@ app.get("/api/conversations/:id/messages", requireAuth, async (req, res) => {
     if (!(await isConversationMember(req.params.id, req.user.id))) {
       return res.status(403).json({ error: "Not a member of this conversation" });
     }
-    res.json(await getMessages(req.params.id));
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const before = req.query.before || null;
+    res.json(await getMessages(req.params.id, limit, before));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -392,6 +394,11 @@ function previewTextFor(message) {
 // member who has no socket connected at all right now — i.e. their app/tab is fully
 // closed. Members who are online already got the message in real time over the
 // socket, so we skip them to avoid a redundant notification banner.
+// Fires a real-time notification event over Pusher Channels to every other member of
+// the conversation, regardless of whether they're currently online. This is separate
+// from the Socket.io "message" broadcast above — Channels gives you a dedicated
+// notification stream (e.g. for a global unread badge) that isn't tied to whichever
+// specific chat room the client's socket happens to be joined to.
 async function notifyOfflineMembers(conversationId, sender, message) {
   console.log("DEBUG notifyOfflineMembers called. beamsEnabled:", beamsEnabled()); // TEMP
   if (!beamsEnabled()) return;

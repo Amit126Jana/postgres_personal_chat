@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import AuthPage from "./AuthPage.jsx";
 import EmojiPicker from "./EmojiPicker.jsx";
@@ -94,6 +94,8 @@ function App() {
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
   const [messagesByConv, setMessagesByConv] = useState({}); // conversationId -> array
+  const [hasMoreByConv, setHasMoreByConv] = useState({}); // conversationId -> boolean (more older messages exist)
+  const [loadingOlderByConv, setLoadingOlderByConv] = useState({}); // conversationId -> boolean
   const [draft, setDraft] = useState("");
   const [typingByConv, setTypingByConv] = useState({}); // conversationId -> username | null
   const [showComposerEmoji, setShowComposerEmoji] = useState(false);
@@ -153,6 +155,7 @@ function App() {
   );
 
   const scrollRef = useRef(null);
+  const pendingScrollAdjustRef = useRef(null); // { prevScrollHeight, prevScrollTop } set right before prepending older messages
   const typingTimeout = useRef(null);
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -184,6 +187,26 @@ function App() {
       });
     }
   }, [activeConvId]);
+
+  // Messages that arrive while the tab is backgrounded still get counted as unread
+  // (see the "message" handler below), even if that conversation is the active one.
+  // When the tab becomes visible again, re-clear the badge for whichever conversation
+  // is currently open — otherwise it stays stuck even though the user is looking at it.
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.hidden) return;
+      const id = activeConvIdRef.current;
+      if (!id) return;
+      setUnreadByConv((prev) => {
+        if (!prev[id]) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   useEffect(() => {
     usernameRef.current = username;
@@ -467,13 +490,19 @@ function App() {
     });
 
     // Fires when the socket.io handshake itself is rejected — e.g. an expired or invalid
-    // JWT. Distinct from "login:error", which is for errors emitted after a successful handshake.
-    socket.on("connect_error", () => {
+    // JWT (server sends `unauthorized`) — OR on plain network/connection failures (timeouts,
+    // transport errors, server cold-starting). Only the former means the user is actually
+    // logged out; the latter is transient and socket.io will keep retrying on its own, so we
+    // must not wipe a still-valid token just because a connection attempt briefly failed.
+    socket.on("connect_error", (err) => {
       setResuming(false);
-      setJoined(false);
-      setLoginError("Your session expired. Please log in again.");
-      tokenRef.current = "";
-      localStorage.removeItem("mf_token");
+      if (err?.message === "unauthorized") {
+        setJoined(false);
+        setLoginError("Your session expired. Please log in again.");
+        tokenRef.current = "";
+        localStorage.removeItem("mf_token");
+      }
+      // else: transient network issue — leave the token intact and let socket.io retry.
     });
 
     // Initial conversation list on login.
@@ -500,6 +529,9 @@ function App() {
         ...prev,
         [conversationId]: messages.map((m) => ({ ...m, reactions: {} })),
       }));
+      // The initial batch is capped at 50 server-side (see getMessages default limit).
+      // A shorter batch means we've already got the whole history for this conversation.
+      setHasMoreByConv((prev) => ({ ...prev, [conversationId]: messages.length >= 50 }));
       messages
         .filter((m) => m.type === "poll")
         .forEach((m) => socket.emit("poll:sync", { messageId: m.id }));
@@ -728,12 +760,70 @@ function App() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [selectMode]);
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
-    });
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (pendingScrollAdjustRef.current) {
+      // We just prepended older messages — keep the same messages in view instead of
+      // jumping to the bottom, by re-adding however much the content height grew.
+      const { prevScrollHeight, prevScrollTop } = pendingScrollAdjustRef.current;
+      el.scrollTop = prevScrollTop + (el.scrollHeight - prevScrollHeight);
+      pendingScrollAdjustRef.current = null;
+      return;
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messagesByConv, activeConvId]);
+
+  // Loads the next batch of older messages for a conversation (scroll-up pagination)
+  // and splices them onto the front of the already-loaded list, preserving the
+  // user's current scroll position so the view doesn't jump.
+  async function loadOlderMessages(conversationId) {
+    if (!conversationId) return;
+    if (loadingOlderByConv[conversationId]) return;
+    if (hasMoreByConv[conversationId] === false) return;
+    const current = messagesByConv[conversationId] || [];
+    const oldest = current[0];
+    if (!oldest) return;
+
+    setLoadingOlderByConv((prev) => ({ ...prev, [conversationId]: true }));
+    try {
+      const res = await fetch(
+        `${SERVER_URL}/api/conversations/${conversationId}/messages?before=${oldest.id}&limit=30`,
+        { headers: { Authorization: `Bearer ${tokenRef.current}` } },
+      );
+      if (!res.ok) throw new Error("Failed to load older messages");
+      const older = await res.json();
+
+      const el = scrollRef.current;
+      if (el) {
+        pendingScrollAdjustRef.current = {
+          prevScrollHeight: el.scrollHeight,
+          prevScrollTop: el.scrollTop,
+        };
+      }
+
+      setMessagesByConv((prev) => ({
+        ...prev,
+        [conversationId]: [
+          ...older.map((m) => ({ ...m, reactions: {} })),
+          ...(prev[conversationId] || []),
+        ],
+      }));
+      setHasMoreByConv((prev) => ({ ...prev, [conversationId]: older.length >= 30 }));
+    } catch (err) {
+      console.error("loadOlderMessages failed:", err.message);
+    } finally {
+      setLoadingOlderByConv((prev) => ({ ...prev, [conversationId]: false }));
+    }
+  }
+
+  // Fires while scrolling the message feed — triggers loading older messages once
+  // the user scrolls near the top.
+  function handleFeedScroll(e) {
+    if (e.currentTarget.scrollTop < 80) {
+      loadOlderMessages(activeConvId);
+    }
+  }
 
   function actuallySendDraft(text) {
     socket.emit("message", {
@@ -1641,7 +1731,12 @@ function App() {
                     {gameError}
                   </div>
                 )}
-                <div className="feed" ref={scrollRef} style={feedBackgroundStyle}>
+                <div className="feed" ref={scrollRef} style={feedBackgroundStyle} onScroll={handleFeedScroll}>
+                  {loadingOlderByConv[activeConvId] && (
+                    <div style={{ textAlign: "center", padding: "8px", fontSize: "12px", opacity: 0.6 }}>
+                      Loading earlier messages…
+                    </div>
+                  )}
                   {activeMessages.map((m) => {
                     const mine = m.username === username;
                     let msgStatus = null;
