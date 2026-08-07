@@ -237,7 +237,6 @@ async function requireAuth(req, res, next) {
     const user = await getUserById(payload.userId);
     if (!user) return res.status(401).json({ error: "Invalid token" });
     req.user = user;
-    console.log("DEBUG requireAuth user id:", user.id, typeof user.id);
     next();
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });
@@ -400,18 +399,13 @@ function previewTextFor(message) {
 // notification stream (e.g. for a global unread badge) that isn't tied to whichever
 // specific chat room the client's socket happens to be joined to.
 async function notifyOfflineMembers(conversationId, sender, message) {
-  console.log("DEBUG notifyOfflineMembers called. beamsEnabled:", beamsEnabled()); // TEMP
   if (!beamsEnabled()) return;
   try {
     const memberIds = await getConversationMemberIds(conversationId);
-    console.log("DEBUG memberIds:", memberIds, "sender:", sender.userId); // TEMP
-    console.log("DEBUG userSockets snapshot:", [...userSockets.entries()].map(([k, v]) => [k, v.size])); // TEMP
     const offlineIds = memberIds.filter(
       (id) => id !== sender.userId && (userSockets.get(id)?.size || 0) === 0
     );
-    console.log("DEBUG offlineIds (will push to):", offlineIds); // TEMP
     if (offlineIds.length === 0) {
-      console.log("DEBUG no offline members - nothing to push"); // TEMP
       return;
     }
     const body = previewTextFor(message);
@@ -424,7 +418,6 @@ async function notifyOfflineMembers(conversationId, sender, message) {
         })
       )
     );
-    console.log("DEBUG pushToUser calls completed for:", offlineIds); // TEMP
   } catch (err) {
     console.error("notifyOfflineMembers failed:", err.message);
   }
@@ -1200,7 +1193,6 @@ io.on("connection", async (socket) => {
 initDb()
   .then(() => {
     server.listen(PORT, "0.0.0.0", () => {
-      console.log(`Chat server listening on http://0.0.0.0:${PORT} (reachable on your LAN)`);
     });
   })
   .catch((err) => {

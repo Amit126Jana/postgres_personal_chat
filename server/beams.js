@@ -9,7 +9,7 @@ if (process.env.BEAMS_INSTANCE_ID && process.env.BEAMS_SECRET_KEY) {
     instanceId: process.env.BEAMS_INSTANCE_ID,
     secretKey: process.env.BEAMS_SECRET_KEY,
   });
-  console.log("Pusher Beams: push notifications enabled");
+  
 } else {
   console.warn(
     "Pusher Beams: BEAMS_INSTANCE_ID / BEAMS_SECRET_KEY not set — push notifications disabled"
