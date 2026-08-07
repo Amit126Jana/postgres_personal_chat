@@ -31,7 +31,45 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [busyId, setBusyId] = useState(null);
   const resolveAvatar = mediaSrc || ((url) => avatarSrc(serverUrl, url));
+
+  async function runAction(userId, path, method = "POST") {
+    setActionError("");
+    setBusyId(userId);
+    try {
+      const res = await fetch(`${serverUrl}/api/admin/users/${userId}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) {
+        if (onLogout) onLogout("Your admin session expired. Please log in again.");
+        else setActionError("You don't have admin access.");
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || "Action failed");
+      await load();
+    } catch (err) {
+      setActionError(err.message || "Action failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function handleSuspend(u) {
+    runAction(u.id, "/suspend");
+  }
+
+  function handleApprove(u) {
+    runAction(u.id, "/approve");
+  }
+
+  function handleDelete(u) {
+    if (!window.confirm(`Permanently delete ${u.username}'s account? This can't be undone.`)) return;
+    runAction(u.id, "", "DELETE");
+  }
 
   async function load() {
     setLoading(true);
@@ -105,6 +143,7 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
       )}
 
       <div className="list-page-body">
+        {actionError && <div className="list-page-empty admin-error">{actionError}</div>}
         {error && <div className="list-page-empty admin-error">{error}</div>}
         {!error && loading && !users && <div className="list-page-empty">Loading users…</div>}
         {!error && users && filtered.length === 0 && (
@@ -127,6 +166,9 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
                 {u.tagline && <div className="admin-row-tagline">{u.tagline}</div>}
               </div>
               <div className="admin-row-status">
+                {u.status === "suspended" && (
+                  <span className="admin-status-pill admin-status-suspended">Suspended</span>
+                )}
                 {u.online ? (
                   <>
                     <span className="admin-status-pill admin-status-online">
@@ -148,6 +190,35 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
                     <div className="admin-row-meta">last seen {timeAgo(u.lastSeen)}</div>
                   </>
                 )}
+              </div>
+              <div className="admin-row-actions">
+                {u.status === "suspended" ? (
+                  <button
+                    type="button"
+                    className="admin-action-btn admin-action-approve"
+                    disabled={busyId === u.id}
+                    onClick={() => handleApprove(u)}
+                  >
+                    {busyId === u.id ? "…" : "Approve"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="admin-action-btn admin-action-suspend"
+                    disabled={busyId === u.id}
+                    onClick={() => handleSuspend(u)}
+                  >
+                    {busyId === u.id ? "…" : "Suspend"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="admin-action-btn admin-action-delete"
+                  disabled={busyId === u.id}
+                  onClick={() => handleDelete(u)}
+                >
+                  Delete
+                </button>
               </div>
             </div>
           ))}

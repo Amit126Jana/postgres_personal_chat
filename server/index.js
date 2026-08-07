@@ -45,6 +45,8 @@ import {
   getClearedChats,
   listUsersForAdmin,
   setUserAdminByPhone,
+  setUserStatus,
+  deleteUserAccount,
 } from "./db.js";
 import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_PLAYER_GAMES } from "./games.js";
 import { recordGameResult, getGameHistory } from "./db.js";
@@ -208,6 +210,10 @@ app.post("/api/auth/login", async (req, res) => {
     const ok = await bcrypt.compare(result.pass, row.password_hash);
     if (!ok) return res.status(401).json(genericError);
 
+    if (row.status === "suspended") {
+      return res.status(403).json({ error: "This account has been suspended.", suspended: true });
+    }
+
     await touchLastSeen(row.id);
     await syncAdminFlag(row.phone_number);
     const token = signToken(row.id);
@@ -237,6 +243,9 @@ async function requireAuth(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     const user = await getUserById(payload.userId);
     if (!user) return res.status(401).json({ error: "Invalid token" });
+    if (user.status === "suspended") {
+      return res.status(403).json({ error: "This account has been suspended.", suspended: true });
+    }
     req.user = user;
     console.log("DEBUG requireAuth user id:", user.id, typeof user.id);
     next();
@@ -300,6 +309,63 @@ app.get("/api/admin/users", requireAuth, requireAdmin, async (_req, res) => {
       };
     });
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Disconnects every live socket for a user right now, so a suspend/delete takes effect
+// immediately instead of waiting for their token to expire. On reconnect the socket.io
+// handshake (io.use above) re-checks the account and rejects it, which the client's
+// existing connect_error handler turns into an automatic logout.
+function kickUserSockets(userId) {
+  for (const socketId of userSockets.get(userId) || []) {
+    const s = io.sockets.sockets.get(socketId);
+    if (s) s.disconnect(true);
+  }
+}
+
+// Suspend an account: blocks login, blocks all REST calls, and force-disconnects any
+// active session (which stops them from sending messages and logs them out).
+app.post("/api/admin/users/:id/suspend", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+    if (targetId === req.user.id) {
+      return res.status(400).json({ error: "You can't suspend your own account." });
+    }
+    const updated = await setUserStatus(targetId, "suspended");
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    kickUserSockets(targetId);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Re-activates a previously suspended account.
+app.post("/api/admin/users/:id/approve", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+    const updated = await setUserStatus(targetId, "active");
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Permanently deletes an account (and, via FK cascade, their conversation memberships,
+// messages, game history, etc.), then force-disconnects any active session.
+app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+    if (targetId === req.user.id) {
+      return res.status(400).json({ error: "You can't delete your own account." });
+    }
+    const deleted = await deleteUserAccount(targetId);
+    if (!deleted) return res.status(404).json({ error: "User not found" });
+    kickUserSockets(targetId);
+    res.json({ id: targetId, deleted: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -523,6 +589,7 @@ io.use(async (socket, next) => {
     const payload = jwt.verify(token, JWT_SECRET);
     const user = await getUserById(payload.userId);
     if (!user) return next(new Error("unauthorized"));
+    if (user.status === "suspended") return next(new Error("suspended"));
     socket.data.user = user;
     next();
   } catch {

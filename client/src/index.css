@@ -1708,6 +1708,49 @@ textarea {
   margin-top: 4px;
   max-width: 180px;
 }
+.admin-status-suspended {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+  margin-bottom: 4px;
+  display: block;
+}
+.admin-row-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 4px;
+}
+.admin-action-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--surface-3);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.admin-action-btn:hover {
+  filter: brightness(1.1);
+}
+.admin-action-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.admin-action-suspend {
+  color: #e0a800;
+  border-color: rgba(224, 168, 0, 0.35);
+}
+.admin-action-approve {
+  color: #2ecc71;
+  border-color: rgba(46, 204, 113, 0.35);
+}
+.admin-action-delete {
+  color: #e74c3c;
+  border-color: rgba(231, 76, 60, 0.35);
+}
 
 /* ---------------- Standalone admin app (/admin) ---------------- */
 .admin-page-standalone {

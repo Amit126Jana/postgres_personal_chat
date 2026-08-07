@@ -56,6 +56,13 @@ export async function initDb() {
   // only per-group). Grants access to the Admin section inside the chat app itself.
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin SMALLINT NOT NULL DEFAULT 0`);
 
+  // Account status, set by an admin from the Admin panel. 'suspended' accounts are
+  // rejected at login, at the socket handshake (forcing an immediate disconnect/logout
+  // of any live session), and on every REST call — see requireAuth/io.use in index.js.
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'active'`);
+  await query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_status_check`);
+  await query(`ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('active', 'suspended'))`);
+
   // A conversation is either a 1:1 "direct" chat or a named "group" chat.
   await query(`
     CREATE TABLE IF NOT EXISTS conversations (
@@ -283,7 +290,7 @@ export async function createUser(phoneNumber, username, passwordHash) {
 // never send this row to a client as-is.
 export async function getUserWithPasswordByPhone(phoneNumber) {
   const [rows] = await query(
-    "SELECT id, phone_number, username, password_hash, avatar_url, tagline, theme_color, show_online, is_admin FROM users WHERE phone_number = ?",
+    "SELECT id, phone_number, username, password_hash, avatar_url, tagline, theme_color, show_online, is_admin, status FROM users WHERE phone_number = ?",
     [phoneNumber]
   );
   return rows[0] || null;
@@ -327,7 +334,8 @@ export async function updateUserProfile(userId, { username, tagline, avatarUrl, 
 export async function getUserById(userId) {
   const [rows] = await query(
     `SELECT id, phone_number AS "phoneNumber", username, avatar_url AS "avatarUrl",
-            tagline, theme_color AS "themeColor", show_online AS "showOnline", is_admin AS "isAdmin"
+            tagline, theme_color AS "themeColor", show_online AS "showOnline", is_admin AS "isAdmin",
+            status
      FROM users WHERE id = ?`,
     [userId]
   );
@@ -349,15 +357,35 @@ export async function listUsers() {
 export async function listUsersForAdmin() {
   const [rows] = await query(
     `SELECT id, phone_number AS "phoneNumber", username, avatar_url AS "avatarUrl",
-            tagline, created_at AS "createdAt", last_seen AS "lastSeen"
+            tagline, created_at AS "createdAt", last_seen AS "lastSeen", status,
+            is_admin AS "isAdmin"
      FROM users ORDER BY username`
   );
-  return rows;
+  return rows.map((u) => ({ ...u, isAdmin: !!u.isAdmin }));
 }
 
 // Grants or revokes the global in-app admin flag for the account with this phone number.
 export async function setUserAdminByPhone(phoneNumber, isAdmin) {
   await query("UPDATE users SET is_admin = ? WHERE phone_number = ?", [isAdmin ? 1 : 0, phoneNumber]);
+}
+
+// Suspends or reactivates ("approves") an account. A suspended user is rejected at
+// login, at the socket handshake, and on every authenticated REST call.
+export async function setUserStatus(userId, status) {
+  if (!["active", "suspended"].includes(status)) throw new Error("Invalid status");
+  const [rows] = await query(
+    `UPDATE users SET status = ? WHERE id = ?
+     RETURNING id, phone_number AS "phoneNumber", username, status`,
+    [status, userId]
+  );
+  return rows[0] || null;
+}
+
+// Permanently removes an account and everything tied to it (memberships, messages,
+// game history, etc. all cascade via FK ON DELETE CASCADE).
+export async function deleteUserAccount(userId) {
+  const [rows] = await query("DELETE FROM users WHERE id = ? RETURNING id", [userId]);
+  return rows.length > 0;
 }
 
 export async function getUserByPhone(phoneNumber) {

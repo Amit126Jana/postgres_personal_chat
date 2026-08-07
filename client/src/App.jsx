@@ -537,9 +537,13 @@ function App() {
     // must not wipe a still-valid token just because a connection attempt briefly failed.
     socket.on("connect_error", (err) => {
       setResuming(false);
-      if (err?.message === "unauthorized") {
+      if (err?.message === "unauthorized" || err?.message === "suspended") {
         setJoined(false);
-        setLoginError("Your session expired. Please log in again.");
+        setLoginError(
+          err.message === "suspended"
+            ? "This account has been suspended."
+            : "Your session expired. Please log in again."
+        );
         tokenRef.current = "";
         localStorage.removeItem("mf_token");
       }
