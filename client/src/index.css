@@ -2210,10 +2210,13 @@ label.modal-user-row {
   .app.mobile-chat-open .feed-col {
     display: flex;
     position: fixed;
-    inset: 0 0 0 64px;
+    inset: 0;
     z-index: 50;
   }
   .app.mobile-chat-open .sidebar {
+    display: none;
+  }
+  .app.mobile-chat-open .icon-rail {
     display: none;
   }
   .mobile-back-btn {
@@ -2226,7 +2229,7 @@ label.modal-user-row {
   .admin-page {
     grid-column: 2;
     position: fixed;
-    inset: 0 0 0 64px;
+    inset: 0;
     z-index: 40;
   }
     .composer {
