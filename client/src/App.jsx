@@ -549,9 +549,9 @@ function App() {
     // Initial conversation list on login.
     socket.on("conversations", (list) => {
       setConversations(list);
-      if (list.length > 0) {
-        setActiveConvId((prev) => prev || list[0].id);
-      }
+      // Intentionally do NOT auto-select the first conversation here — on login/reload
+      // the person should land on the "Start a conversation" screen, not jump straight
+      // into whichever chat they last had open.
     });
 
     // A conversation was created/updated (new DM or group involving me).
