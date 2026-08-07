@@ -108,6 +108,7 @@ function App() {
   const [showNewChat, setShowNewChat] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState([]); // [{ id, file, previewUrl, kind }] staged, not yet sent
   const [mobileChatOpen, setMobileChatOpen] = useState(false); // narrow-screen nav: list vs conversation
 
   // --- Multi-select / delete-for-me / clear chat / wallpapers ---
@@ -187,6 +188,15 @@ function App() {
         return next;
       });
     }
+  }, [activeConvId]);
+
+  // Don't let staged-but-unsent attachments follow the user into a different chat.
+  useEffect(() => {
+    setPendingFiles((prev) => {
+      prev.forEach((p) => p.previewUrl && URL.revokeObjectURL(p.previewUrl));
+      return [];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConvId]);
 
   // Messages that arrive while the tab is backgrounded still get counted as unread
@@ -839,12 +849,20 @@ function App() {
   function handleSend(e) {
     e.preventDefault();
     const text = draft.trim();
-    if (!text || !activeConvId) return;
+    if (!text && pendingFiles.length === 0) return;
+    if (!activeConvId) return;
     if (selectMode) {
-      setSelectModeGuard({ kind: "send", action: () => actuallySendDraft(text) });
+      setSelectModeGuard({
+        kind: "send",
+        action: () => {
+          if (pendingFiles.length > 0) sendPendingFiles();
+          if (text) actuallySendDraft(text);
+        },
+      });
       return;
     }
-    actuallySendDraft(text);
+    if (pendingFiles.length > 0) sendPendingFiles();
+    if (text) actuallySendDraft(text);
   }
 
   // Runs `action` immediately, unless we're in message-select mode, in which
@@ -942,13 +960,50 @@ function App() {
     socket.emit("game:forfeit", { conversationId: activeConvId });
   }
 
-  async function sendFilesAsMessages(files) {
+  function kindForFile(file) {
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type.startsWith("video/")) return "video";
+    if (file.type.startsWith("audio/")) return "audio";
+    return "file";
+  }
+
+  // Adds files to the staging area (shown as previews in the composer) instead of
+  // uploading/sending immediately. The user reviews them and hits Send.
+  function stageFiles(files) {
     if (!files || files.length === 0 || !activeConvId) return;
+    const staged = files.map((file) => {
+      const kind = kindForFile(file);
+      return {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+        kind,
+        previewUrl: kind === "image" || kind === "video" ? URL.createObjectURL(file) : null,
+      };
+    });
+    setPendingFiles((prev) => [...prev, ...staged]);
+  }
+
+  function removePendingFile(id) {
+    setPendingFiles((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((p) => p.id !== id);
+    });
+  }
+
+  function clearPendingFiles() {
+    setPendingFiles((prev) => {
+      prev.forEach((p) => p.previewUrl && URL.revokeObjectURL(p.previewUrl));
+      return [];
+    });
+  }
+
+  // Actually uploads + sends every staged file, in the order they were added.
+  async function sendPendingFiles() {
+    if (pendingFiles.length === 0 || !activeConvId) return;
     setUploading(true);
     try {
-      // Sequential (not parallel) so messages land in the order the files were picked,
-      // and so one huge upload doesn't starve the others on a slow connection.
-      for (const file of files) {
+      for (const { file } of pendingFiles) {
         try {
           const { mediaUrl, mediaName, type } = await uploadFile(file);
           socket.emit("message", {
@@ -964,6 +1019,7 @@ function App() {
       }
     } finally {
       setUploading(false);
+      clearPendingFiles();
     }
   }
 
@@ -971,11 +1027,12 @@ function App() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    await sendFilesAsMessages([file]);
+    stageFiles([file]);
   }
 
-  // Pasting an image/video/audio/file (e.g. Ctrl+V after copying an image) straight
-  // into the message input sends it as media, same as using the attach button.
+  // Pasting an image/video/audio/file (e.g. Ctrl+V after copying an image) stages it
+  // as a preview in the composer, same as picking it via the attach button — it isn't
+  // sent until the user hits Send.
   function handleComposerPaste(e) {
     const items = e.clipboardData?.items;
     if (!items || !activeConvId) return;
@@ -985,10 +1042,11 @@ function App() {
       .filter(Boolean);
     if (files.length === 0) return; // plain text paste — let the browser handle it normally
     e.preventDefault();
-    sendFilesAsMessages(files);
+    stageFiles(files);
   }
 
-  // Dragging a file in from the OS (e.g. a folder window) anywhere over the chat pane.
+  // Dragging a file in from the OS (e.g. a folder window) anywhere over the chat pane
+  // stages it as a preview — it isn't sent until the user hits Send.
   function handleFeedDragOver(e) {
     e.preventDefault();
     if (e.dataTransfer.types?.includes("Files")) setIsDraggingFile(true);
@@ -1005,7 +1063,7 @@ function App() {
     setIsDraggingFile(false);
     const files = Array.from(e.dataTransfer.files || []);
     if (files.length === 0 || !activeConvId) return;
-    sendFilesAsMessages(files);
+    stageFiles(files);
   }
 
   function startDirectChat(otherUserId) {
@@ -2065,6 +2123,68 @@ function App() {
                   </div>
                 </div>
 
+                {pendingFiles.length > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      padding: "8px 14px",
+                      overflowX: "auto",
+                      borderTop: "1px solid rgba(128,128,128,0.25)",
+                    }}
+                  >
+                    {pendingFiles.map((p) => (
+                      <div
+                        key={p.id}
+                        style={{
+                          position: "relative",
+                          flexShrink: 0,
+                          width: "64px",
+                          height: "64px",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          background: "rgba(128,128,128,0.15)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "11px",
+                          textAlign: "center",
+                        }}
+                        title={p.file.name}
+                      >
+                        {p.kind === "image" && (
+                          <img src={p.previewUrl} alt={p.file.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        )}
+                        {p.kind === "video" && (
+                          <video src={p.previewUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted />
+                        )}
+                        {p.kind === "audio" && <span>🎤</span>}
+                        {p.kind === "file" && <span style={{ padding: "4px" }}>📎 {p.file.name.slice(0, 10)}</span>}
+                        <button
+                          type="button"
+                          onClick={() => removePendingFile(p.id)}
+                          aria-label={`Remove ${p.file.name}`}
+                          style={{
+                            position: "absolute",
+                            top: 2,
+                            right: 2,
+                            width: "18px",
+                            height: "18px",
+                            borderRadius: "50%",
+                            border: "none",
+                            background: "rgba(0,0,0,0.65)",
+                            color: "#fff",
+                            fontSize: "12px",
+                            lineHeight: "18px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <form className="composer" onSubmit={handleSend}>
                   <div className="composer-emoji-wrap">
                     <button
@@ -2117,7 +2237,7 @@ function App() {
                   <button
                     type="submit"
                     className="send_btn"
-                    disabled={!draft.trim()}
+                    disabled={!draft.trim() && pendingFiles.length === 0}
                   >
                     <svg className="icon" width="30" height="30">
                       <use href="#send-icon" />
