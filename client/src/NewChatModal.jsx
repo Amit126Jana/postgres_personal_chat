@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-export default function NewChatModal({ serverUrl, token, myUserId, onStartDirect, onStartGroup, onClose }) {
-  const [mode, setMode] = useState("direct"); // "direct" | "group"
+export default function NewChatModal({ serverUrl, token, myUserId, onStartDirect, onStartGroup, onClose, initialMode }) {
+  const [mode, setMode] = useState(initialMode === "group" ? "group" : "direct"); // "direct" | "group"
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [groupName, setGroupName] = useState("");

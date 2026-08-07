@@ -106,6 +106,7 @@ function App() {
   const [editingText, setEditingText] = useState("");
   const [playingReaction, setPlayingReaction] = useState(null); // { kind: "voice"|"video", url }
   const [showNewChat, setShowNewChat] = useState(false);
+  const [newChatMode, setNewChatMode] = useState("direct");
   const [uploading, setUploading] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]); // [{ id, file, previewUrl, kind }] staged, not yet sent
@@ -1570,13 +1571,46 @@ function App() {
               MakeFriends
               <span className={"pulse-dot" + (connected ? "" : " off")} />
             </div>
-            <button
-              type="button"
-              className="new-chat-btn"
-              onClick={() => setShowNewChat(true)}
-            >
-              + New chat / group
-            </button>
+            <div className="new-action-row">
+              <button
+                type="button"
+                className="new-action-card new-action-chat"
+                onClick={() => {
+                  setNewChatMode("direct");
+                  setShowNewChat(true);
+                }}
+              >
+                <span className="new-action-icon">
+                  <svg className="icon" width="18" height="18">
+                    <use href="#chat-icon" />
+                  </svg>
+                </span>
+                <span className="new-action-copy">
+                  <span className="new-action-title">New Chat</span>
+                  <span className="new-action-sub">Start a private conversation</span>
+                </span>
+                <span className="new-action-arrow">›</span>
+              </button>
+              <button
+                type="button"
+                className="new-action-card new-action-group"
+                onClick={() => {
+                  setNewChatMode("group");
+                  setShowNewChat(true);
+                }}
+              >
+                <span className="new-action-icon">
+                  <svg className="icon" width="18" height="18">
+                    <use href="#groups-icon" />
+                  </svg>
+                </span>
+                <span className="new-action-copy">
+                  <span className="new-action-title">New Group</span>
+                  <span className="new-action-sub">Create a group chat</span>
+                </span>
+                <span className="new-action-arrow">›</span>
+              </button>
+            </div>
             <div className="roster-label">chats — {conversations.length}</div>
             <ul className="roster conv-list">
               {conversations.map((c) => (
@@ -2464,6 +2498,7 @@ function App() {
           onStartDirect={startDirectChat}
           onStartGroup={startGroupChat}
           onClose={() => setShowNewChat(false)}
+          initialMode={newChatMode}
         />
       )}
 

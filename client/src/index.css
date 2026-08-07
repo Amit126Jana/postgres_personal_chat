@@ -1,27 +1,29 @@
 :root {
-  --signal: #863bff; /* accent, overridden live by theme-color picker */
-  --signal-rgb: 134, 59, 255;
-  --signal-dim: #6f2fd6;
-  --signal-gradient: linear-gradient(135deg, #863bff, #47bfff); /* overridden live by theme-color picker */
+  --signal: #a239ff; /* accent, overridden live by theme-color picker */
+  --signal-rgb: 162, 57, 255;
+  --signal-dim: #7c1fd6;
+  --signal-gradient: linear-gradient(135deg, #7c3aed, #4f7dff); /* overridden live by theme-color picker */
+  --signal-gradient-chat: linear-gradient(135deg, #ff4d6d, #c724b1);
+  --signal-gradient-group: linear-gradient(135deg, #7c3aed, #4f7dff);
 
   /* dark mode (default) */
-  --bg: #171925;
-  --rail-bg: #1a1c2b;
-  --surface: #1e2032;
-  --surface-2: #262a3e;
-  --surface-3: #2d3148;
-  --line: #313653;
-  --text: #eef0fa;
-  --text-muted: #9498b3;
-  --text-faint: #6b6f8c;
+  --bg: #0e0f1a;
+  --rail-bg: #12131f;
+  --surface: #151623;
+  --surface-2: #1c1e2e;
+  --surface-3: #262941;
+  --line: #262941;
+  --text: #f2f2fb;
+  --text-muted: #9195b3;
+  --text-faint: #5f6382;
   --bubble-mine: var(--signal);
   --bubble-mine-gradient: var(--signal-gradient);
   --bubble-mine-text: #ffffff;
-  --bubble-other: #262a3e;
-  --bubble-other-text: #eef0fa;
+  --bubble-other: #1c1e2e;
+  --bubble-other-text: #f2f2fb;
   --danger: #f1556c;
   --success: #2ecc71;
-  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 
   --mono: "IBM Plex Mono", ui-monospace, monospace;
   --display: "Space Grotesk", sans-serif;
@@ -29,15 +31,15 @@
 }
 
 html[data-theme="light"] {
-  --bg: #f4f5fa;
+  --bg: #f5f5fb;
   --rail-bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f1f2fa;
-  --surface-3: #e9eaf6;
-  --line: #e6e7f2;
-  --text: #2a2c3e;
-  --text-muted: #7a7d97;
-  --text-faint: #a4a6bd;
+  --surface-2: #f1f1fa;
+  --surface-3: #e8e8f5;
+  --line: #e6e6f2;
+  --text: #211f33;
+  --text-muted: #75768f;
+  --text-faint: #a3a4bd;
   --bubble-mine: var(--signal);
   --bubble-mine-gradient: var(--signal-gradient);
   --bubble-mine-text: #ffffff;
@@ -131,8 +133,8 @@ textarea {
   justify-content: center;
   background: var(--bg);
   background-image:
-    radial-gradient(circle at 12% 8%, rgba(var(--signal-rgb), 0.16), transparent 45%),
-    radial-gradient(circle at 88% 92%, rgba(var(--signal-rgb), 0.12), transparent 40%);
+    radial-gradient(circle at 12% 8%, rgba(255, 77, 109, 0.16), transparent 45%),
+    radial-gradient(circle at 88% 92%, rgba(var(--signal-rgb), 0.18), transparent 42%);
   padding: 24px;
 }
 .gate-card {
@@ -140,7 +142,7 @@ textarea {
   max-width: 420px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 22px;
   padding: 40px 36px;
   box-shadow: var(--shadow);
   text-align: center;
@@ -152,8 +154,11 @@ textarea {
   font-family: var(--display);
   font-weight: 700;
   font-size: 22px;
-  letter-spacing: 0.06em;
-  color: var(--signal);
+  letter-spacing: 0.02em;
+  background: linear-gradient(135deg, #ff4d6d, #a239ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
   margin-bottom: 18px;
 }
 .gate-card h1 {
@@ -190,7 +195,7 @@ textarea {
   padding: 13px 16px;
   border-radius: 12px;
   border: none;
-  background: var(--signal-gradient, var(--signal));
+  background: linear-gradient(135deg, #ff4d6d, #a239ff);
   color: #fff;
   font-weight: 600;
   font-size: 15px;
@@ -249,7 +254,7 @@ textarea {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .auth-tab.active {
-  background: var(--signal-gradient, var(--signal));
+  background: linear-gradient(135deg, #ff4d6d, #a239ff);
   color: #fff;
 }
 .password-field {
@@ -316,7 +321,7 @@ textarea {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: var(--signal-gradient, var(--signal));
+  background: linear-gradient(135deg, #ff4d6d, #a239ff);
   color: #fff;
   display: flex;
   align-items: center;
@@ -363,7 +368,7 @@ textarea {
   color: var(--text);
 }
 .rail-btn.active {
-  background: var(--signal-gradient, var(--signal));
+  background: linear-gradient(135deg, #ff4d6d, #a239ff);
   color: #fff;
 }
 .rail-spacer {
@@ -474,6 +479,73 @@ textarea {
 .new-chat-btn:hover {
   filter: brightness(1.08);
 }
+.new-action-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 16px 16px;
+}
+.new-action-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: none;
+  text-align: left;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.new-action-card:hover {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+.new-action-card:active {
+  transform: translateY(0);
+}
+.new-action-chat {
+  background: var(--signal-gradient-chat, linear-gradient(135deg, #ff4d6d, #c724b1));
+}
+.new-action-group {
+  background: var(--signal-gradient-group, linear-gradient(135deg, #7c3aed, #4f7dff));
+}
+.new-action-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.new-action-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.new-action-title {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+.new-action-sub {
+  font-size: 11.5px;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.new-action-arrow {
+  margin-left: auto;
+  font-size: 18px;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
 .roster-label {
   padding: 0 20px 8px;
   font-size: 11.5px;
@@ -504,7 +576,8 @@ textarea {
   background: var(--surface-2);
 }
 .conv-item.active {
-  background: var(--surface-2);
+  background: linear-gradient(135deg, rgba(255, 77, 109, 0.14), rgba(162, 57, 255, 0.14));
+  box-shadow: inset 0 0 0 1px rgba(var(--signal-rgb), 0.35);
 }
 .conv-empty {
   padding: 24px 10px;
@@ -589,10 +662,18 @@ textarea {
 }
 .group-call-header-btn {
   width: auto;
+  height: 34px;
   gap: 6px;
   padding: 0 12px;
+  border-radius: 10px;
   font-size: 12.5px;
   font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.group-call-header-btn:hover:not(:disabled) {
+  background: var(--signal-gradient, var(--signal));
+  border-color: transparent;
 }
 .header-msg-actions {
   margin-left: auto;
@@ -694,14 +775,18 @@ textarea {
   font-size: 14px;
 }
 .room-label {
-  padding: 16px 24px;
+  padding: 14px 24px;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   gap: 10px;
   font-weight: 600;
   font-size: 15.5px;
-  background: var(--surface);
+  background: var(--rail-bg);
+  min-height: 66px;
+}
+.room-title-text {
+  font-family: var(--display);
 }
 .mobile-back-btn {
   display: none;
@@ -2165,6 +2250,16 @@ label.modal-user-row {
     gap: 6px;
     font-size: 14px;
     flex-wrap: nowrap;
+    min-height: 56px;
+  }
+  .new-action-row {
+    margin: 4px 12px 12px;
+  }
+  .new-action-card {
+    padding: 10px 12px;
+  }
+  .new-action-sub {
+    display: none;
   }
   .room-title-text {
     min-width: 0;
