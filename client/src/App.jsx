@@ -108,6 +108,8 @@ function App() {
   const [playingReaction, setPlayingReaction] = useState(null); // { kind: "voice"|"video", url }
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatMode, setNewChatMode] = useState("direct");
+  const [convSearch, setConvSearch] = useState("");
+  const [convFilterTab, setConvFilterTab] = useState("all"); // "all" | "unread" | "groups"
   const [uploading, setUploading] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]); // [{ id, file, previewUrl, kind }] staged, not yet sent
@@ -1470,8 +1472,11 @@ function App() {
       <IconSprite />
 
       <nav className="icon-rail">
-        <div className="rail-brand">
-          <img src="/logo.png" alt="MakeFriends" />
+        <div className="rail-brand-row">
+          <div className="rail-brand">
+            <img src="/logo.png" alt="MakeFriends" />
+          </div>
+          <span className="rail-wordmark">MakeFriends</span>
         </div>
         <button
           type="button"
@@ -1479,19 +1484,21 @@ function App() {
           title="Chats"
           onClick={() => runOrConfirmLeaveSelect(() => setActiveView("chats"))}
         >
-          <svg className="icon" width="22" height="22">
+          <svg className="icon" width="20" height="20">
             <use href="#chat-icon" />
           </svg>
+          <span className="rail-label">Chats</span>
         </button>
         <button
           type="button"
-          className={"rail-btn" + (activeView === "profile" ? " active" : "")}
-          title="Profile"
-          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("profile"))}
+          className={"rail-btn" + (activeView === "contacts" ? " active" : "")}
+          title="Friends"
+          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("contacts"))}
         >
-          <svg className="icon" width="22" height="22">
-            <use href="#profile-icon" />
+          <svg className="icon" width="20" height="20">
+            <use href="#contacts-icon" />
           </svg>
+          <span className="rail-label">Friends</span>
         </button>
         <button
           type="button"
@@ -1499,19 +1506,50 @@ function App() {
           title="Groups"
           onClick={() => runOrConfirmLeaveSelect(() => setActiveView("groups"))}
         >
-          <svg className="icon" width="22" height="22">
+          <svg className="icon" width="20" height="20">
             <use href="#groups-icon" />
           </svg>
+          <span className="rail-label">Groups</span>
         </button>
         <button
           type="button"
-          className={"rail-btn" + (activeView === "contacts" ? " active" : "")}
-          title="Contacts"
-          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("contacts"))}
+          className="rail-btn"
+          title="Games"
+          onClick={() =>
+            runOrConfirmLeaveSelect(() => {
+              if (activeConv) {
+                setActiveView("chats");
+                setShowGamesMenu(true);
+              } else {
+                setActiveView("chats");
+              }
+            })
+          }
         >
-          <svg className="icon" width="22" height="22">
-            <use href="#contacts-icon" />
+          <svg className="icon" width="20" height="20">
+            <use href="#video-call-icon" />
           </svg>
+          <span className="rail-label">Games</span>
+        </button>
+        <button
+          type="button"
+          className="rail-btn"
+          title="Polls"
+          onClick={() =>
+            runOrConfirmLeaveSelect(() => {
+              if (activeConv) {
+                setActiveView("chats");
+                setShowPollComposer(true);
+              } else {
+                setActiveView("chats");
+              }
+            })
+          }
+        >
+          <svg className="icon" width="20" height="20">
+            <use href="#info-icon" />
+          </svg>
+          <span className="rail-label">Polls</span>
         </button>
         {isAdmin && (
           <button
@@ -1520,12 +1558,24 @@ function App() {
             title="Admin"
             onClick={() => runOrConfirmLeaveSelect(() => setActiveView("admin"))}
           >
-            <svg className="icon" width="22" height="22">
+            <svg className="icon" width="20" height="20">
               <use href="#admin-icon" />
             </svg>
+            <span className="rail-label">Admin</span>
           </button>
         )}
         <div className="rail-spacer" />
+        <button
+          type="button"
+          className={"rail-btn" + (activeView === "settings" ? " active" : "")}
+          title="Settings"
+          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("settings"))}
+        >
+          <svg className="icon" width="20" height="20">
+            <use href="#settings-icon" />
+          </svg>
+          <span className="rail-label">Settings</span>
+        </button>
         <button
           type="button"
           className="rail-btn"
@@ -1535,28 +1585,23 @@ function App() {
           <svg className="icon" width="20" height="20">
             <use href={darkMode ? "#sun-icon" : "#moon-icon"} />
           </svg>
+          <span className="rail-label">Theme</span>
         </button>
         <button
           type="button"
-          className={"rail-btn" + (activeView === "settings" ? " active" : "")}
-          title="Settings"
-          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("settings"))}
-        >
-          <svg className="icon" width="22" height="22">
-            <use href="#settings-icon" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className="rail-btn rail-avatar"
+          className="rail-user-card"
           title={username}
           onClick={() => runOrConfirmLeaveSelect(() => setActiveView("profile"))}
         >
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="" />
-          ) : (
-            <span>{initials(username)}</span>
-          )}
+          <span className="rail-avatar">
+            {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{initials(username)}</span>}
+          </span>
+          <span className="rail-user-info">
+            <span className="rail-user-name">{username}</span>
+            <span className={"rail-user-status" + (connected ? "" : " off")}>
+              {connected ? "Online" : "Offline"}
+            </span>
+          </span>
         </button>
       </nav>
 
@@ -1611,11 +1656,59 @@ function App() {
       ) : (
         <>
           <aside className="sidebar">
-            <div className="brand">
-              <img src="/logo.png" alt="" className="brand-logo" />
-              MakeFriends
-              <span className={"pulse-dot" + (connected ? "" : " off")} />
+            <div className="sidebar-header">
+              <h1 className="sidebar-title">Chats</h1>
+              <button
+                type="button"
+                className="compose-btn"
+                title="New chat or group"
+                onClick={() => {
+                  setNewChatMode("direct");
+                  setShowNewChat(true);
+                }}
+              >
+                <svg className="icon" width="17" height="17">
+                  <use href="#edit-pencil-icon" />
+                </svg>
+              </button>
             </div>
+
+            <div className="sidebar-search">
+              <svg className="icon sidebar-search-icon" width="15" height="15">
+                <use href="#search-icon" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search chats..."
+                value={convSearch}
+                onChange={(e) => setConvSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="sidebar-tabs">
+              <button
+                type="button"
+                className={"sidebar-tab" + (convFilterTab === "all" ? " active" : "")}
+                onClick={() => setConvFilterTab("all")}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className={"sidebar-tab" + (convFilterTab === "unread" ? " active" : "")}
+                onClick={() => setConvFilterTab("unread")}
+              >
+                Unread
+              </button>
+              <button
+                type="button"
+                className={"sidebar-tab" + (convFilterTab === "groups" ? " active" : "")}
+                onClick={() => setConvFilterTab("groups")}
+              >
+                Groups
+              </button>
+            </div>
+
             <div className="new-action-row">
               <button
                 type="button"
@@ -1656,9 +1749,17 @@ function App() {
                 <span className="new-action-arrow">›</span>
               </button>
             </div>
-            <div className="roster-label">chats — {conversations.length}</div>
+            <div className="roster-label">recent chats — {conversations.length}</div>
             <ul className="roster conv-list">
-              {conversations.map((c) => (
+              {conversations
+                .filter((c) => {
+                  if (convFilterTab === "unread" && !(unreadByConv[c.id] > 0)) return false;
+                  if (convFilterTab === "groups" && c.type !== "group") return false;
+                  if (convSearch.trim() && !c.name.toLowerCase().includes(convSearch.trim().toLowerCase()))
+                    return false;
+                  return true;
+                })
+                .map((c) => (
                 <li
                   key={c.id}
                   className={
@@ -1751,7 +1852,41 @@ function App() {
             )}
             {!activeConv ? (
               <div className="empty-state">
-                Pick a chat, or start a new one.
+                <div className="empty-state-illustration">
+                  <svg className="icon" width="40" height="40">
+                    <use href="#chat-icon" />
+                  </svg>
+                </div>
+                <h2 className="empty-state-title">Start a conversation</h2>
+                <p className="empty-state-sub">Select a chat from the list or start a new one.</p>
+                <div className="empty-state-actions">
+                  <button
+                    type="button"
+                    className="empty-state-btn empty-state-btn-chat"
+                    onClick={() => {
+                      setNewChatMode("direct");
+                      setShowNewChat(true);
+                    }}
+                  >
+                    <svg className="icon" width="16" height="16">
+                      <use href="#chat-icon" />
+                    </svg>
+                    New Chat
+                  </button>
+                  <button
+                    type="button"
+                    className="empty-state-btn empty-state-btn-group"
+                    onClick={() => {
+                      setNewChatMode("group");
+                      setShowNewChat(true);
+                    }}
+                  >
+                    <svg className="icon" width="16" height="16">
+                      <use href="#groups-icon" />
+                    </svg>
+                    New Group
+                  </button>
+                </div>
               </div>
             ) : (
               <>
