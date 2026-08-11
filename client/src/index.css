@@ -2064,38 +2064,42 @@ textarea {
 .mfp-hero .profile-quote {
   position: relative;
   z-index: 2;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 .mfp-hero {
   position: relative;
   margin: 18px 26px 0;
-  padding: 0 20px 20px;
+  padding: 0 20px 22px;
+  overflow: visible;
+}
+.mfp-hero-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 132px;
   border-radius: 18px;
   background:
     linear-gradient(120deg, rgba(124, 58, 237, 0.55), rgba(199, 36, 177, 0.35), rgba(241, 85, 108, 0.4));
   background-size: cover;
   background-position: center;
   overflow: hidden;
-  isolation: isolate;
+  z-index: 0;
 }
-.mfp-hero::before {
+.mfp-hero-bg::before {
   content: "";
   position: absolute;
   inset: 0;
   background-image: radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.12), transparent 40%);
   pointer-events: none;
-  z-index: 0;
 }
-/* Darkens the lower portion of the hero so name/status/quote stay readable
-   over any cover photo, including very dark or very bright ones. */
-.mfp-hero::after {
+/* Darkens the lower portion of the cover photo so the edit/camera buttons and
+   the top of the avatar stay legible over any cover photo, light or dark. */
+.mfp-hero-bg::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.15) 55%, rgba(0, 0, 0, 0.55) 100%);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.1) 55%, rgba(0, 0, 0, 0.45) 100%);
   pointer-events: none;
-  z-index: 0;
 }
 .mfp-edit-btn {
   position: absolute;
@@ -2141,7 +2145,7 @@ textarea {
   position: relative;
   width: 108px;
   margin: 0 auto;
-  padding-top: 36px;
+  padding-top: 78px;
   z-index: 2;
 }
 .mfp-avatar {
@@ -2160,15 +2164,6 @@ textarea {
 .mfp-identity {
   position: relative;
   z-index: 2;
-}
-.mfp-identity .profile-name {
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 0 14px rgba(0, 0, 0, 0.25);
-}
-.mfp-status {
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 .mfp-name-input {
   max-width: 240px;

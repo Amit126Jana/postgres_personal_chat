@@ -114,8 +114,11 @@ export default function ProfilePage({
 
       <div
         className="mfp-hero"
-        style={coverUrl ? { backgroundImage: `url(${coverUrl})` } : undefined}
       >
+        <div
+          className="mfp-hero-bg"
+          style={coverUrl ? { backgroundImage: `url(${coverUrl})` } : undefined}
+        />
         {!editing && (
           <button type="button" className="mfp-edit-btn" onClick={startEdit}>
             <svg className="icon" width="14" height="14"><use href="#edit-pencil-icon" /></svg>
