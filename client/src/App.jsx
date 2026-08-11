@@ -864,8 +864,16 @@ function App() {
     });
 
     socket.on("call:answer", async ({ fromId, accepted, callId }) => {
-      // Ignore answers that don't belong to the call we're currently placing.
-      if (callId !== callIdRef.current || callPeerRef.current?.id !== fromId) return;
+      // Ignore answers that don't belong to the call we're currently placing. Note: we
+      // only compare callId here, not the peer id — as the caller, callPeerRef.current.id
+      // is still the callee's persistent *userId* (that's all we knew at invite time),
+      // while `fromId` on every event after that is their live *socket id*. Those are
+      // different id spaces by design, so callId (unique per call attempt) is the only
+      // safe thing to match on.
+      if (callId !== callIdRef.current) return;
+      // Now that the callee has responded, learn their live socket id so any further
+      // messages we send (end, decline-ack, etc.) reach them directly.
+      if (callPeerRef.current) callPeerRef.current = { ...callPeerRef.current, id: fromId };
       if (!accepted) {
         teardownCall();
         return;
@@ -892,8 +900,12 @@ function App() {
     socket.on("call:signal", async ({ fromId, signal, callId }) => {
       // Drop any signal that isn't part of the call we're currently in — this is what
       // stops a stale offer/answer/candidate (e.g. from a call that was just hung up)
-      // from ever being applied to a new call's peer connection.
-      if (!callId || callId !== callIdRef.current || callPeerRef.current?.id !== fromId) return;
+      // from ever being applied to a new call's peer connection. As above, we match on
+      // callId only, since `fromId` here is a live socket id that won't equal a
+      // caller-side callPeerRef.current.id captured as a persistent userId.
+      if (!callId || callId !== callIdRef.current) return;
+      // Keep the peer's live socket id current so end/decline can always reach them.
+      if (callPeerRef.current) callPeerRef.current = { ...callPeerRef.current, id: fromId };
       try {
         if (signal.type === "offer") {
           const pc = pcRef.current || createPeerConnection(fromId, callId);
@@ -933,9 +945,13 @@ function App() {
       }
     });
 
-    socket.on("call:end", ({ fromId, callId }) => {
-      // Only tear down if this "end" actually belongs to the call currently in progress.
-      if (callPeerRef.current?.id !== fromId) return;
+    socket.on("call:end", ({ callId }) => {
+      // Only tear down if this "end" belongs to the call currently in progress. Matching
+      // on callId alone (rather than also checking fromId against callPeerRef.current.id)
+      // is what lets this fire correctly regardless of which side — caller or callee —
+      // is the one hanging up, since the two sides don't share a common id space for
+      // the peer until an answer/signal has been exchanged.
+      if (!callIdRef.current) return;
       if (callId && callId !== callIdRef.current) return;
       teardownCall();
     });

@@ -1254,15 +1254,31 @@ io.on("connection", async (socket) => {
   // We relay it unchanged on every event so each side can ignore stale events that
   // belong to a call that has already ended (e.g. a late "answer" arriving after the
   // caller already hung up and started a new call with someone else).
+  //
+  // A call starts out addressed by the callee's persistent userId (the caller only
+  // knows that at call:invite:user time), but every reply after that is addressed by
+  // whatever `fromId` the sender was last seen at — which is a live socket id. So
+  // `toId` on these events can legitimately be *either* a socket id or a userId;
+  // resolve it to actual connected socket ids before relaying so messages generated
+  // by the caller (who only ever knows the callee's userId) actually reach them,
+  // including a cancel sent before the callee has answered.
+  function resolveCallTargets(toId) {
+    if (!toId) return [];
+    if (onlineUsers.has(toId)) return [toId]; // already a live socket id
+    return [...(userSockets.get(toId) || [])]; // treat as a persistent userId
+  }
+
   socket.on("call:invite", ({ toId, callId, callType }) => {
     const caller = onlineUsers.get(socket.id);
-    if (!caller || !onlineUsers.has(toId)) return;
-    io.to(toId).emit("call:invite", {
-      fromId: socket.id,
-      fromUsername: caller.username,
-      callId,
-      callType: callType === "audio" ? "audio" : "video",
-    });
+    if (!caller) return;
+    resolveCallTargets(toId).forEach((sid) =>
+      io.to(sid).emit("call:invite", {
+        fromId: socket.id,
+        fromUsername: caller.username,
+        callId,
+        callType: callType === "audio" ? "audio" : "video",
+      }),
+    );
   });
 
   // Call by persistent userId (e.g. from a conversation member list) — resolved to
@@ -1284,15 +1300,21 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("call:answer", ({ toId, accepted, callId }) => {
-    io.to(toId).emit("call:answer", { fromId: socket.id, accepted, callId });
+    resolveCallTargets(toId).forEach((sid) =>
+      io.to(sid).emit("call:answer", { fromId: socket.id, accepted, callId }),
+    );
   });
 
   socket.on("call:signal", ({ toId, signal, callId }) => {
-    io.to(toId).emit("call:signal", { fromId: socket.id, signal, callId });
+    resolveCallTargets(toId).forEach((sid) =>
+      io.to(sid).emit("call:signal", { fromId: socket.id, signal, callId }),
+    );
   });
 
   socket.on("call:end", ({ toId, callId }) => {
-    io.to(toId).emit("call:end", { fromId: socket.id, callId });
+    resolveCallTargets(toId).forEach((sid) =>
+      io.to(sid).emit("call:end", { fromId: socket.id, callId }),
+    );
   });
 
   // --- WebRTC group video calls (mesh, capped at 8 participants) ---
