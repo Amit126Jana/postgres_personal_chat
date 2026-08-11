@@ -1998,37 +1998,6 @@ function App() {
                   {unreadByConv[c.id] > 0 && (
                     <span className="unread-badge">{unreadByConv[c.id]}</span>
                   )}
-                  {c.type === "direct" &&
-                    (() => {
-                      const other = otherMemberOf(c);
-                      if (!other) return null;
-                      return (
-                        <span className="roster-call-btns" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="call-icon-btn"
-                            title={`Audio call ${other.username}`}
-                            disabled={!!callState}
-                            onClick={() => startCall(other.id, other.username, c.avatarUrl, "audio")}
-                          >
-                            <svg className="icon" width="16" height="16">
-                              <use href="#phone-icon" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            className="call-icon-btn"
-                            title={`Video call ${other.username}`}
-                            disabled={!!callState}
-                            onClick={() => startCall(other.id, other.username, c.avatarUrl, "video")}
-                          >
-                            <svg className="icon" width="16" height="16">
-                              <use href="#video-call-icon" />
-                            </svg>
-                          </button>
-                        </span>
-                      );
-                    })()}
                 </li>
               ))}
               {conversations.length === 0 && (
@@ -2165,7 +2134,13 @@ function App() {
                       )}
                     </span>
                   ) : (
-                    ""
+                    <span className="room-avatar">
+                      {activeConv.avatarUrl ? (
+                        <img src={mediaSrc(activeConv.avatarUrl)} alt="" />
+                      ) : (
+                        initials(activeConv.name)
+                      )}
+                    </span>
                   )}
                   {activeConv.type === "group" && (
                     <input
@@ -2180,7 +2155,40 @@ function App() {
                       }}
                     />
                   )}
-                  <span className="room-title-text">{activeConv.name}</span>
+                  <span className="room-identity">
+                    <span className="room-title-text">{activeConv.name}</span>
+                  </span>
+                  {activeConv.type === "direct" &&
+                    (() => {
+                      const other = otherMemberOf(activeConv);
+                      if (!other) return null;
+                      return (
+                        <span className="room-header-call-btns">
+                          <button
+                            type="button"
+                            className="header-action-btn"
+                            title={`Audio call ${other.username}`}
+                            disabled={!!callState}
+                            onClick={() => startCall(other.id, other.username, activeConv.avatarUrl, "audio")}
+                          >
+                            <svg className="icon" width="18" height="18">
+                              <use href="#phone-icon" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="header-action-btn"
+                            title={`Video call ${other.username}`}
+                            disabled={!!callState}
+                            onClick={() => startCall(other.id, other.username, activeConv.avatarUrl, "video")}
+                          >
+                            <svg className="icon" width="18" height="18">
+                              <use href="#video-call-icon" />
+                            </svg>
+                          </button>
+                        </span>
+                      );
+                    })()}
                   {activeConv.type === "group" && (
                     <span className="conv-badge">                      {activeConv.members?.length || 0} members
                     </span>
@@ -2699,8 +2707,8 @@ function App() {
                     {uploading ? (
                       "…"
                     ) : (
-                      <svg className="icon" width="25" height="25">
-                        <use href="#attach-icon" />
+                      <svg className="icon" width="20" height="20">
+                        <use href="#plus-icon" />
                       </svg>
                     )}
                   </button>
