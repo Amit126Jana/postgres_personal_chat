@@ -1739,8 +1739,8 @@ textarea {
 }
 .settings-hero-avatar-edit {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
+  right: 0;
+  bottom: 0;
   width: 28px;
   height: 28px;
   border-radius: 50%;
