@@ -1716,6 +1716,11 @@ textarea {
   position: relative;
   width: 92px;
   height: 92px;
+  flex-shrink: 0;
+}
+.settings-hero-avatar-inner {
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   border: 4px solid var(--surface);
   background: var(--surface-3);
@@ -1726,9 +1731,8 @@ textarea {
   font-weight: 700;
   font-size: 24px;
   overflow: hidden;
-  flex-shrink: 0;
 }
-.settings-hero-avatar img {
+.settings-hero-avatar-inner img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1747,6 +1751,7 @@ textarea {
   justify-content: center;
   border: 2px solid var(--surface);
   cursor: pointer;
+  z-index: 5;
 }
 .settings-hero-text {
   padding-bottom: 10px;

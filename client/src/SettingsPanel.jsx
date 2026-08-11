@@ -267,11 +267,13 @@ export default function SettingsPanel({
 
         <div className="settings-hero-identity">
           <div className="settings-hero-avatar">
-            {profile.avatarUrl ? (
-              <img src={resolveMedia(profile.avatarUrl)} alt="Profile" />
-            ) : (
-              <span>{initials(name)}</span>
-            )}
+            <div className="settings-hero-avatar-inner">
+              {profile.avatarUrl ? (
+                <img src={resolveMedia(profile.avatarUrl)} alt="Profile" />
+              ) : (
+                <span>{initials(name)}</span>
+              )}
+            </div>
             <label className="settings-hero-avatar-edit" title="Change profile picture">
               <svg className="icon" width="13" height="13"><use href="#camera-icon" /></svg>
               <input
