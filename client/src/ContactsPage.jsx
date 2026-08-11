@@ -59,17 +59,24 @@ export default function ContactsPage({ contacts, onOpenContact, onCall, onNewCha
                   {c.online && <div className="contact-row-sub">Active now</div>}
                 </div>
                 {c.otherId && (
-                  <button
-                    type="button"
-                    className="contact-menu-btn"
-                    title={`Call ${c.name}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCall(c.otherId, c.name);
-                    }}
-                  >
-                    <svg className="icon" width="16" height="16"><use href="#phone-icon" /></svg>
-                  </button>
+                  <span className="contact-call-btns" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="contact-menu-btn"
+                      title={`Audio call ${c.name}`}
+                      onClick={() => onCall(c.otherId, c.name, c.avatarUrl, "audio")}
+                    >
+                      <svg className="icon" width="16" height="16"><use href="#phone-icon" /></svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="contact-menu-btn"
+                      title={`Video call ${c.name}`}
+                      onClick={() => onCall(c.otherId, c.name, c.avatarUrl, "video")}
+                    >
+                      <svg className="icon" width="16" height="16"><use href="#video-call-icon" /></svg>
+                    </button>
+                  </span>
                 )}
               </div>
             ))}

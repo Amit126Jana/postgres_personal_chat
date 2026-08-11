@@ -1250,35 +1250,49 @@ io.on("connection", async (socket) => {
   });
 
   // --- WebRTC video/audio call signaling (1:1 calls, server just relays) ---
-  socket.on("call:invite", ({ toId }) => {
+  // `callId` is a client-generated token that uniquely identifies one call attempt.
+  // We relay it unchanged on every event so each side can ignore stale events that
+  // belong to a call that has already ended (e.g. a late "answer" arriving after the
+  // caller already hung up and started a new call with someone else).
+  socket.on("call:invite", ({ toId, callId, callType }) => {
     const caller = onlineUsers.get(socket.id);
     if (!caller || !onlineUsers.has(toId)) return;
-    io.to(toId).emit("call:invite", { fromId: socket.id, fromUsername: caller.username });
+    io.to(toId).emit("call:invite", {
+      fromId: socket.id,
+      fromUsername: caller.username,
+      callId,
+      callType: callType === "audio" ? "audio" : "video",
+    });
   });
 
   // Call by persistent userId (e.g. from a conversation member list) — resolved to
   // whichever of their live sockets is currently connected.
-  socket.on("call:invite:user", ({ toUserId }) => {
+  socket.on("call:invite:user", ({ toUserId, callId, callType }) => {
     const caller = onlineUsers.get(socket.id);
     if (!caller) return;
     const targetSocketId = [...(userSockets.get(toUserId) || [])][0];
     if (!targetSocketId) {
-      socket.emit("call:answer", { fromId: toUserId, accepted: false, reason: "offline" });
+      socket.emit("call:answer", { fromId: toUserId, accepted: false, reason: "offline", callId });
       return;
     }
-    io.to(targetSocketId).emit("call:invite", { fromId: socket.id, fromUsername: caller.username });
+    io.to(targetSocketId).emit("call:invite", {
+      fromId: socket.id,
+      fromUsername: caller.username,
+      callId,
+      callType: callType === "audio" ? "audio" : "video",
+    });
   });
 
-  socket.on("call:answer", ({ toId, accepted }) => {
-    io.to(toId).emit("call:answer", { fromId: socket.id, accepted });
+  socket.on("call:answer", ({ toId, accepted, callId }) => {
+    io.to(toId).emit("call:answer", { fromId: socket.id, accepted, callId });
   });
 
-  socket.on("call:signal", ({ toId, signal }) => {
-    io.to(toId).emit("call:signal", { fromId: socket.id, signal });
+  socket.on("call:signal", ({ toId, signal, callId }) => {
+    io.to(toId).emit("call:signal", { fromId: socket.id, signal, callId });
   });
 
-  socket.on("call:end", ({ toId }) => {
-    io.to(toId).emit("call:end", { fromId: socket.id });
+  socket.on("call:end", ({ toId, callId }) => {
+    io.to(toId).emit("call:end", { fromId: socket.id, callId });
   });
 
   // --- WebRTC group video calls (mesh, capped at 8 participants) ---

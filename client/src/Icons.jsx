@@ -331,6 +331,35 @@ export default function IconSprite() {
       <symbol id="call-end-icon" viewBox="0 0 24 24">
         <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" d="M3.5 14c5.7-4.6 11.3-4.6 17 0l-1.8 2.6a1.4 1.4 0 0 1-1.8.4l-2-1.1a1.4 1.4 0 0 1-.7-1.3l.1-1.4a12 12 0 0 0-6.6 0l.1 1.4a1.4 1.4 0 0 1-.7 1.3l-2 1.1a1.4 1.4 0 0 1-1.8-.4z" />
       </symbol>
+
+      <symbol id="speaker-icon" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M4 9.5h3.2L11 6.2c.5-.4 1.2-.05 1.2.6v10.4c0 .65-.7 1-1.2.6L7.2 14.5H4a.7.7 0 0 1-.7-.7V10.2c0-.4.3-.7.7-.7z" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M16 8.5a5 5 0 0 1 0 7M18.6 6a8.5 8.5 0 0 1 0 12" />
+      </symbol>
+
+      <symbol id="speaker-off-icon" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M4 9.5h3.2L11 6.2c.5-.4 1.2-.05 1.2.6v10.4c0 .65-.7 1-1.2.6L7.2 14.5H4a.7.7 0 0 1-.7-.7V10.2c0-.4.3-.7.7-.7z" />
+        <path stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M15.5 9.5l5 5m0-5l-5 5" />
+      </symbol>
+
+      <symbol id="keypad-icon" viewBox="0 0 24 24">
+        <circle cx="7" cy="6.5" r="1.4" fill="currentColor" />
+        <circle cx="12" cy="6.5" r="1.4" fill="currentColor" />
+        <circle cx="17" cy="6.5" r="1.4" fill="currentColor" />
+        <circle cx="7" cy="12" r="1.4" fill="currentColor" />
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+        <circle cx="17" cy="12" r="1.4" fill="currentColor" />
+        <circle cx="7" cy="17.5" r="1.4" fill="currentColor" />
+        <circle cx="12" cy="17.5" r="1.4" fill="currentColor" />
+        <circle cx="17" cy="17.5" r="1.4" fill="currentColor" />
+      </symbol>
+
+      <symbol id="switch-camera-icon" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M4 8.5h3l1.3-2h3.4M20 15.5h-3l-1.3 2H12.3" />
+        <rect x="2.5" y="8.5" width="12" height="9" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="8.5" cy="13" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="m17.5 6 2.5 2.5-2.5 2.5M17.5 18l-2.5-2.5 2.5-2.5" />
+      </symbol>
     </svg>
   );
 }

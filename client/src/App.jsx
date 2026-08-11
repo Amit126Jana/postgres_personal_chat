@@ -133,11 +133,15 @@ function App() {
 
   // --- Call state ---
   const [callState, setCallState] = useState(null); // null | "calling" | "ringing" | "connecting" | "active"
-  const [callPeer, setCallPeer] = useState(null); // { id, username }
+  const [callPeer, setCallPeer] = useState(null); // { id, username, avatarUrl }
+  const [callType, setCallType] = useState("video"); // "audio" | "video"
+  const [callRole, setCallRole] = useState(null); // "caller" | "receiver" (for UI: sender vs receiver layout)
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  const [speakerOn, setSpeakerOn] = useState(true);
+  const [callStartedAt, setCallStartedAt] = useState(null);
 
   // --- Group call state ---
   const [groupCallConvId, setGroupCallConvId] = useState(null);
@@ -167,6 +171,12 @@ function App() {
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
   const callPeerRef = useRef(null); // mirrors callPeer for use in socket callbacks
+  const callIdRef = useRef(null); // uniquely identifies the *current* call attempt; used to
+  // ignore stale signaling events left over from a previous, already-ended call.
+  const callTypeRef = useRef("video");
+  const pendingCandidatesRef = useRef([]); // ICE candidates buffered until remoteDescription is set
+  const remoteDescSetRef = useRef(false);
+  const videoDeviceIdRef = useRef(null); // deviceId of the camera currently in use (for "switch camera")
   const fileInputRef = useRef(null);
   const activeConvIdRef = useRef(null);
   const usernameRef = useRef("");
@@ -303,82 +313,191 @@ function App() {
   }
 
   // --- Cleanup helpers for calls ---
+  // Fully tears down whatever call is currently in progress (if any) and resets every
+  // piece of call-related state, so nothing from this call can leak into or interfere
+  // with the next one. Safe to call multiple times / when there's no active call.
   function teardownCall() {
+    // Invalidate this call's id first — any in-flight signal/answer callbacks still
+    // resolving after this point will see a mismatched callId and no-op.
+    callIdRef.current = null;
+
     if (pcRef.current) {
-      pcRef.current.close();
+      const pc = pcRef.current;
+      // Detach handlers before closing so no late/queued event from the old
+      // connection can still touch React state after teardown.
+      pc.onicecandidate = null;
+      pc.ontrack = null;
+      pc.onconnectionstatechange = null;
+      pc.oniceconnectionstatechange = null;
+      pc.onnegotiationneeded = null;
+      try {
+        pc.getSenders().forEach((s) => s.track && s.track.stop());
+      } catch {
+        // ignore
+      }
+      pc.close();
       pcRef.current = null;
     }
+
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
+
+    pendingCandidatesRef.current = [];
+    remoteDescSetRef.current = false;
+    videoDeviceIdRef.current = null;
+    callPeerRef.current = null;
+    callTypeRef.current = "video";
+
     setLocalStream(null);
     setRemoteStream(null);
     setCallState(null);
     setCallPeer(null);
-    callPeerRef.current = null;
+    setCallType("video");
+    setCallRole(null);
     setMicOn(true);
     setCamOn(true);
+    setSpeakerOn(true);
+    setCallStartedAt(null);
   }
 
-  function createPeerConnection(remoteId) {
+  function createPeerConnection(remoteId, callId) {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pc.onicecandidate = (e) => {
-      if (e.candidate) {
+      // Guard against a trailing candidate firing after this call has already ended.
+      if (e.candidate && callIdRef.current === callId) {
         socket.emit("call:signal", {
           toId: remoteId,
+          callId,
           signal: { type: "candidate", candidate: e.candidate },
         });
       }
     };
     pc.ontrack = (e) => {
+      if (callIdRef.current !== callId) return;
       setRemoteStream(e.streams[0]);
+    };
+    pc.onconnectionstatechange = () => {
+      if (callIdRef.current !== callId) return;
+      if (["disconnected", "failed", "closed"].includes(pc.connectionState)) {
+        teardownCall();
+      }
     };
     pcRef.current = pc;
     return pc;
   }
 
-  async function getLocalMedia() {
+  async function getLocalMedia(type) {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
+      video: type === "audio" ? false : true,
       audio: true,
     });
     localStreamRef.current = stream;
+    const vTrack = stream.getVideoTracks()[0];
+    if (vTrack) videoDeviceIdRef.current = vTrack.getSettings().deviceId || null;
     setLocalStream(stream);
     return stream;
   }
 
-  function startCall(toUserId, toUsername) {
+  function genCallId() {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  // Applies any ICE candidates that arrived before the remote description was set.
+  async function flushPendingCandidates(pc) {
+    const queued = pendingCandidatesRef.current;
+    pendingCandidatesRef.current = [];
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.error("Failed to add queued ICE candidate", err);
+      }
+    }
+  }
+
+  function startCall(toUserId, toUsername, avatarUrl, type = "video") {
+    if (callState) return; // already in a call — ignore
+    const callId = genCallId();
+    callIdRef.current = callId;
+    callTypeRef.current = type;
     setCallState("calling");
-    setCallPeer({ id: toUserId, username: toUsername });
-    callPeerRef.current = { id: toUserId, username: toUsername };
-    socket.emit("call:invite:user", { toUserId });
+    setCallRole("caller");
+    setCallType(type);
+    setCallPeer({ id: toUserId, username: toUsername, avatarUrl: avatarUrl || null });
+    callPeerRef.current = { id: toUserId, username: toUsername, avatarUrl: avatarUrl || null };
+    socket.emit("call:invite:user", { toUserId, callId, callType: type });
   }
 
   async function acceptCall() {
     const peer = callPeerRef.current;
-    if (!peer) return;
+    const callId = callIdRef.current;
+    if (!peer || !callId) return;
     try {
-      await getLocalMedia();
+      await getLocalMedia(callTypeRef.current);
+      if (callIdRef.current !== callId) return; // call was ended/replaced while awaiting media
       setCallState("connecting");
-      socket.emit("call:answer", { toId: peer.id, accepted: true });
+      socket.emit("call:answer", { toId: peer.id, accepted: true, callId });
     } catch (err) {
       console.error("Could not access camera/mic", err);
-      socket.emit("call:answer", { toId: peer.id, accepted: false });
+      socket.emit("call:answer", { toId: peer.id, accepted: false, callId });
       teardownCall();
     }
   }
 
   function declineCall() {
     const peer = callPeerRef.current;
-    if (peer) socket.emit("call:answer", { toId: peer.id, accepted: false });
+    const callId = callIdRef.current;
+    if (peer) socket.emit("call:answer", { toId: peer.id, accepted: false, callId });
     teardownCall();
   }
 
   function endCall() {
     const peer = callPeerRef.current;
-    if (peer) socket.emit("call:end", { toId: peer.id });
+    const callId = callIdRef.current;
+    if (peer) socket.emit("call:end", { toId: peer.id, callId });
     teardownCall();
+  }
+
+  // Cycles to the next available camera (front/back on mobile, or between webcams on
+  // desktop) mid-call by swapping the outgoing video track on the existing peer connection.
+  async function switchCamera() {
+    if (!localStreamRef.current || callTypeRef.current !== "video") return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter((d) => d.kind === "videoinput");
+      if (cams.length < 2) return;
+      const currentIdx = cams.findIndex((d) => d.deviceId === videoDeviceIdRef.current);
+      const next = cams[(currentIdx + 1 + cams.length) % cams.length];
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: next.deviceId } },
+        audio: false,
+      });
+      const newTrack = newStream.getVideoTracks()[0];
+      if (!newTrack) return;
+
+      const oldTrack = localStreamRef.current.getVideoTracks()[0];
+      const sender = pcRef.current?.getSenders().find((s) => s.track && s.track.kind === "video");
+      if (sender) await sender.replaceTrack(newTrack);
+
+      newTrack.enabled = camOn;
+      localStreamRef.current.removeTrack(oldTrack);
+      localStreamRef.current.addTrack(newTrack);
+      oldTrack.stop();
+      videoDeviceIdRef.current = next.deviceId;
+      // Re-trigger the <video> binding effect in CallOverlay with the (same) stream object.
+      setLocalStream(localStreamRef.current);
+    } catch (err) {
+      console.error("Failed to switch camera", err);
+    }
+  }
+
+  // Purely a UI/UX affordance for now (there's no separate "speaker" output device to
+  // pick on most desktop browsers) — flips the label/icon and, where supported, tries
+  // to route audio to the loudspeaker via setSinkId.
+  function toggleSpeaker() {
+    setSpeakerOn((v) => !v);
   }
 
   function pushToast(title, body) {
@@ -723,29 +842,44 @@ function App() {
     });
 
     // --- Call signaling ---
-    socket.on("call:invite", ({ fromId, fromUsername }) => {
+    // Every event below carries the `callId` the sender attached at call:invite time.
+    // We check it against callIdRef/callPeerRef before acting, so a stale event from a
+    // call that has since ended (declined, hung up, replaced by a new call) is ignored
+    // instead of corrupting the state of whatever call is happening now.
+    socket.on("call:invite", ({ fromId, fromUsername, callId, callType: incomingType }) => {
       if (callPeerRef.current) {
-        socket.emit("call:answer", { toId: fromId, accepted: false });
+        // Already in (or setting up) a call — decline any other incoming invite so the
+        // two calls' state never mix.
+        socket.emit("call:answer", { toId: fromId, accepted: false, callId });
         return;
       }
+      const peerAvatar = peerAvatarByUserId(fromId);
+      callIdRef.current = callId;
+      callTypeRef.current = incomingType === "audio" ? "audio" : "video";
       setCallState("ringing");
-      setCallPeer({ id: fromId, username: fromUsername });
-      callPeerRef.current = { id: fromId, username: fromUsername };
+      setCallRole("receiver");
+      setCallType(callTypeRef.current);
+      setCallPeer({ id: fromId, username: fromUsername, avatarUrl: peerAvatar });
+      callPeerRef.current = { id: fromId, username: fromUsername, avatarUrl: peerAvatar };
     });
 
-    socket.on("call:answer", async ({ fromId, accepted }) => {
+    socket.on("call:answer", async ({ fromId, accepted, callId }) => {
+      // Ignore answers that don't belong to the call we're currently placing.
+      if (callId !== callIdRef.current || callPeerRef.current?.id !== fromId) return;
       if (!accepted) {
         teardownCall();
         return;
       }
       try {
-        const stream = await getLocalMedia();
-        const pc = createPeerConnection(fromId);
+        const stream = await getLocalMedia(callTypeRef.current);
+        if (callId !== callIdRef.current) return; // ended while awaiting getUserMedia
+        const pc = createPeerConnection(fromId, callId);
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit("call:signal", {
           toId: fromId,
+          callId,
           signal: { type: "offer", sdp: offer },
         });
         setCallState("connecting");
@@ -755,37 +889,54 @@ function App() {
       }
     });
 
-    socket.on("call:signal", async ({ fromId, signal }) => {
+    socket.on("call:signal", async ({ fromId, signal, callId }) => {
+      // Drop any signal that isn't part of the call we're currently in — this is what
+      // stops a stale offer/answer/candidate (e.g. from a call that was just hung up)
+      // from ever being applied to a new call's peer connection.
+      if (!callId || callId !== callIdRef.current || callPeerRef.current?.id !== fromId) return;
       try {
         if (signal.type === "offer") {
-          const pc = pcRef.current || createPeerConnection(fromId);
+          const pc = pcRef.current || createPeerConnection(fromId, callId);
           const stream = localStreamRef.current;
           if (stream)
             stream.getTracks().forEach((track) => pc.addTrack(track, stream));
           await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          remoteDescSetRef.current = true;
+          await flushPendingCandidates(pc);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           socket.emit("call:signal", {
             toId: fromId,
+            callId,
             signal: { type: "answer", sdp: answer },
           });
           setCallState("active");
+          setCallStartedAt(Date.now());
         } else if (signal.type === "answer") {
-          await pcRef.current?.setRemoteDescription(
-            new RTCSessionDescription(signal.sdp),
-          );
+          if (!pcRef.current) return;
+          await pcRef.current.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          remoteDescSetRef.current = true;
+          await flushPendingCandidates(pcRef.current);
           setCallState("active");
+          setCallStartedAt(Date.now());
         } else if (signal.type === "candidate") {
-          await pcRef.current?.addIceCandidate(
-            new RTCIceCandidate(signal.candidate),
-          );
+          if (!pcRef.current) return;
+          if (remoteDescSetRef.current) {
+            await pcRef.current.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          } else {
+            // Remote description isn't set yet — buffer it, flushed once it is.
+            pendingCandidatesRef.current.push(signal.candidate);
+          }
         }
       } catch (err) {
         console.error("Signal handling failed", err);
       }
     });
 
-    socket.on("call:end", () => {
+    socket.on("call:end", ({ fromId, callId }) => {
+      // Only tear down if this "end" actually belongs to the call currently in progress.
+      if (callPeerRef.current?.id !== fromId) return;
+      if (callId && callId !== callIdRef.current) return;
       teardownCall();
     });
 
@@ -1368,6 +1519,15 @@ function App() {
     return conv.members?.find((m) => m.id !== userId) || null;
   }
 
+  // Best-effort avatar lookup for an incoming call, before we have anything richer than
+  // the caller's userId — scans our existing direct conversations for a match.
+  function peerAvatarByUserId(otherUserId) {
+    const conv = conversationsRef.current.find(
+      (c) => c.type === "direct" && c.members?.some((m) => m.id === otherUserId),
+    );
+    return conv?.avatarUrl || null;
+  }
+
   const groupConversations = conversations.filter((c) => c.type === "group");
   const contactList = conversations
     .filter((c) => c.type === "direct")
@@ -1647,7 +1807,7 @@ function App() {
         <ContactsPage
           contacts={contactList}
           onOpenContact={openConversation}
-          onCall={(otherId, otherName) => startCall(otherId, otherName)}
+          onCall={(otherId, otherName, avatarUrl, type) => startCall(otherId, otherName, avatarUrl, type)}
           onNewChat={() => setShowNewChat(true)}
           mediaSrc={mediaSrc}
         />
@@ -1794,22 +1954,33 @@ function App() {
                   {c.type === "direct" &&
                     (() => {
                       const other = otherMemberOf(c);
-                      return other ? (
-                        <button
-                          type="button"
-                          className="call-icon-btn"
-                          title={`Video call ${other.username}`}
-                          disabled={!!callState}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startCall(other.id, other.username);
-                          }}
-                        >
-                          <svg className="icon" width="16" height="16">
-                            <use href="#video-call-icon" />
-                          </svg>
-                        </button>
-                      ) : null;
+                      if (!other) return null;
+                      return (
+                        <span className="roster-call-btns" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="call-icon-btn"
+                            title={`Audio call ${other.username}`}
+                            disabled={!!callState}
+                            onClick={() => startCall(other.id, other.username, c.avatarUrl, "audio")}
+                          >
+                            <svg className="icon" width="16" height="16">
+                              <use href="#phone-icon" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="call-icon-btn"
+                            title={`Video call ${other.username}`}
+                            disabled={!!callState}
+                            onClick={() => startCall(other.id, other.username, c.avatarUrl, "video")}
+                          >
+                            <svg className="icon" width="16" height="16">
+                              <use href="#video-call-icon" />
+                            </svg>
+                          </button>
+                        </span>
+                      );
                     })()}
                 </li>
               ))}
@@ -2809,16 +2980,23 @@ function App() {
 
       <CallOverlay
         callState={callState}
+        callType={callType}
+        callRole={callRole}
         peerUsername={callPeer?.username}
+        peerAvatarUrl={callPeer?.avatarUrl ? mediaSrc(callPeer.avatarUrl) : null}
         localStream={localStream}
         remoteStream={remoteStream}
         micOn={micOn}
         camOn={camOn}
+        speakerOn={speakerOn}
+        callStartedAt={callStartedAt}
         onAccept={acceptCall}
         onDecline={declineCall}
         onEnd={endCall}
         onToggleMic={toggleMic}
         onToggleCam={toggleCam}
+        onToggleSpeaker={toggleSpeaker}
+        onSwitchCamera={switchCamera}
       />
 
       {groupCallConvId && (
