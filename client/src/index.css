@@ -1413,6 +1413,7 @@ textarea {
   position: relative;
   width: 96px;
   margin: -48px auto 0;
+  z-index: 1;
 }
 .settings-avatar,
 .profile-avatar {
@@ -1449,6 +1450,7 @@ textarea {
   justify-content: center;
   border: 2px solid var(--surface);
   cursor: pointer;
+  z-index: 5;
 }
 .settings-identity,
 .profile-identity {
@@ -2195,6 +2197,7 @@ textarea {
 .mfp-avatar-edit {
   right: -2px;
   bottom: 0;
+  z-index: 5;
 }
 .mfp-identity {
   position: relative;
