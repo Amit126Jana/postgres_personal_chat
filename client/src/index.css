@@ -3235,6 +3235,56 @@ label.modal-user-row {
   font-size: 11px;
   color: var(--text-muted);
 }
+
+.group-call-card-v2 {
+  max-width: 560px;
+}
+.group-call-title {
+  position: relative;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.group-call-title-status {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.group-call-title-status.warn {
+  color: var(--danger);
+}
+
+.call-error-card {
+  max-width: 340px;
+}
+.call-error-icon {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin: 6px auto 14px;
+  border-radius: 50%;
+  background: rgba(var(--signal-rgb), 0.14);
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.call-error-message {
+  position: relative;
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
 .group-call-tile {
   border-radius: 12px;
   overflow: hidden;
@@ -3250,27 +3300,76 @@ label.modal-user-row {
   padding: 4px 6px;
 }
 
-/* ---------------- Incoming call banner + toasts ---------------- */
-.incoming-call-banner {
+/* ---------------- Incoming group call toast ---------------- */
+.group-call-toast {
   position: fixed;
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px 18px;
+  border-radius: 16px;
+  padding: 12px 14px;
   display: flex;
   align-items: center;
-  gap: 16px;
-  box-shadow: var(--shadow);
+  gap: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   z-index: 300;
-  font-size: 13.5px;
+  min-width: 300px;
+  animation: callFadeIn 0.18s ease-out;
 }
-.incoming-call-actions {
+.group-call-toast-avatar {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   display: flex;
-  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: var(--signal-gradient, var(--signal));
 }
+.group-call-toast-body {
+  flex: 1;
+  min-width: 0;
+}
+.group-call-toast-title {
+  font-size: 13.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.group-call-toast-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.group-call-toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.group-call-toast-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.group-call-toast-btn.join {
+  background: var(--success);
+  color: #fff;
+}
+.group-call-toast-btn.dismiss {
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
 .toast-stack {
   position: fixed;
   bottom: 20px;

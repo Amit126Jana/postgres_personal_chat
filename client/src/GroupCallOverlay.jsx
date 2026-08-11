@@ -153,13 +153,50 @@ export default function GroupCallOverlay({ socket, conversationId, conversationN
   const remoteEntries = Object.entries(peers);
   const tileCount = remoteEntries.length + 1;
 
+  if (status === "error") {
+    return (
+      <div className="call-overlay-v2">
+        <div className="call-card-v2 is-audio call-error-card">
+          <div className="call-v2-kicker">Group call</div>
+          <div className="call-error-icon">
+            <svg className="icon" width="30" height="30">
+              <use href="#video-off-icon" />
+            </svg>
+          </div>
+          <div className="call-v2-name">{conversationName}</div>
+          <div className="call-error-message">
+            Couldn't access your camera or microphone. Check your browser's site
+            permissions and try again.
+          </div>
+          <div className="call-v2-controls">
+            <div className="call-v2-btn-wrap">
+              <button className="call-v2-btn decline" onClick={onClose} aria-label="Close">
+                <svg className="icon" width="22" height="22">
+                  <use href="#call-end-icon" />
+                </svg>
+              </button>
+              <span className="call-v2-btn-label">Close</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="call-overlay">
-      <div className="call-card group-call-card">
-        <div className="group-call-header">
-          {conversationName} {status === "connecting" && "— connecting…"}
-          {status === "full" && "— call is full (max 8)"}
-          {status === "error" && "— couldn't access camera/mic"}
+    <div className="call-overlay-v2">
+      <div className="call-card-v2 is-video group-call-card-v2">
+        <div className="call-v2-kicker">Group call</div>
+        <div className="group-call-title">
+          {conversationName}
+          {status === "connecting" && (
+            <span className="group-call-title-status">
+              <span className="call-v2-pulse-dot" /> connecting…
+            </span>
+          )}
+          {status === "full" && (
+            <span className="group-call-title-status warn">call is full (max 8)</span>
+          )}
         </div>
 
         <div className={`group-call-grid tiles-${Math.min(tileCount, 9)}`}>
@@ -172,16 +209,39 @@ export default function GroupCallOverlay({ socket, conversationId, conversationN
           ))}
         </div>
 
-        <div className="call-controls">
-          <button className="call-btn ghost" onClick={toggleMic}>
-            {micOn ? "Mute" : "Unmute"}
-          </button>
-          <button className="call-btn ghost" onClick={toggleCam}>
-            {camOn ? "Camera off" : "Camera on"}
-          </button>
-          <button className="call-btn decline" onClick={onClose}>
-            Leave call
-          </button>
+        <div className="call-v2-controls">
+          <div className="call-v2-btn-wrap">
+            <button
+              className={`call-v2-btn ghost ${!micOn ? "is-off" : ""}`}
+              onClick={toggleMic}
+              aria-label={micOn ? "Mute" : "Unmute"}
+            >
+              <svg className="icon" width="20" height="20">
+                <use href={micOn ? "#mic-icon" : "#mic-off-icon"} />
+              </svg>
+            </button>
+            <span className="call-v2-btn-label">{micOn ? "Mute" : "Unmute"}</span>
+          </div>
+          <div className="call-v2-btn-wrap">
+            <button
+              className={`call-v2-btn ghost ${!camOn ? "is-off" : ""}`}
+              onClick={toggleCam}
+              aria-label={camOn ? "Camera off" : "Camera on"}
+            >
+              <svg className="icon" width="20" height="20">
+                <use href={camOn ? "#camera-icon" : "#video-off-icon"} />
+              </svg>
+            </button>
+            <span className="call-v2-btn-label">Camera</span>
+          </div>
+          <div className="call-v2-btn-wrap">
+            <button className="call-v2-btn decline" onClick={onClose} aria-label="Leave call">
+              <svg className="icon" width="22" height="22">
+                <use href="#call-end-icon" />
+              </svg>
+            </button>
+            <span className="call-v2-btn-label">Leave</span>
+          </div>
         </div>
       </div>
     </div>

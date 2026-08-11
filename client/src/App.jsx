@@ -3013,28 +3013,41 @@ function App() {
       )}
 
       {incomingGroupCall && !groupCallConvId && (
-        <div className="incoming-call-banner">
-          <span>
-            <strong>{incomingGroupCall.fromUsername}</strong> started a call in{" "}
-            {incomingGroupCall.conversationName}
+        <div className="group-call-toast">
+          <span className="group-call-toast-avatar">
+            <svg className="icon" width="18" height="18">
+              <use href="#video-call-icon" />
+            </svg>
           </span>
-          <div className="incoming-call-actions">
+          <div className="group-call-toast-body">
+            <div className="group-call-toast-title">
+              <strong>{incomingGroupCall.fromUsername}</strong> started a call
+            </div>
+            <div className="group-call-toast-sub">in {incomingGroupCall.conversationName}</div>
+          </div>
+          <div className="group-call-toast-actions">
             <button
               type="button"
-              className="call-btn accept"
+              className="group-call-toast-btn join"
+              title="Join call"
               onClick={() => {
                 setGroupCallConvId(incomingGroupCall.conversationId);
                 setIncomingGroupCall(null);
               }}
             >
-              Join
+              <svg className="icon" width="18" height="18">
+                <use href="#phone-icon" />
+              </svg>
             </button>
             <button
               type="button"
-              className="call-btn ghost"
+              className="group-call-toast-btn dismiss"
+              title="Dismiss"
               onClick={() => setIncomingGroupCall(null)}
             >
-              Dismiss
+              <svg className="icon" width="15" height="15">
+                <use href="#close-icon" />
+              </svg>
             </button>
           </div>
         </div>
