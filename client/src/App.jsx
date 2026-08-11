@@ -87,6 +87,7 @@ function App() {
     () => localStorage.getItem("mf_theme_mode") !== "light",
   );
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [gamesPlayedCount, setGamesPlayedCount] = useState(0);
   const [groupAvatarUploading, setGroupAvatarUploading] = useState(false);
   const groupAvatarInputRef = useRef(null);
   const [resuming, setResuming] = useState(false); // auto-relogin in progress after a page refresh
@@ -1368,6 +1369,26 @@ function App() {
   // No-ops quietly if VITE_BEAMS_INSTANCE_ID isn't set, the browser doesn't support
   // service workers, or the page isn't served over HTTPS (all required for web push).
   useEffect(() => {
+    if (activeView !== "profile" || !joined || !tokenRef.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/games/history`, {
+          headers: { Authorization: `Bearer ${tokenRef.current}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setGamesPlayedCount(Array.isArray(data) ? data.length : 0);
+      } catch {
+        // Non-critical stat — leave the previous count if the fetch fails.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView, joined]);
+
+  useEffect(() => {
     const instanceId = import.meta.env.VITE_BEAMS_INSTANCE_ID;
     if (!joined || !userId || !instanceId) return;
     if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
@@ -1808,8 +1829,18 @@ function App() {
         />
       ) : activeView === "profile" ? (
         <ProfilePage
-          profile={{ username, phoneNumber, avatarUrl, tagline }}
+          profile={{ username, phoneNumber, avatarUrl, coverUrl, tagline }}
           connected={connected}
+          stats={{
+            chats: conversations.length,
+            friends: contactList.length,
+            groups: groupConversations.length,
+            games: gamesPlayedCount,
+          }}
+          uploading={avatarUploading}
+          onUploadAvatar={handleAvatarUpload}
+          onUploadCover={handleCoverUpload}
+          onSave={saveProfile}
           onClose={() => setActiveView("chats")}
         />
       ) : activeView === "groups" ? (
