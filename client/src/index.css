@@ -2061,7 +2061,12 @@ textarea {
   align-items: center;
   gap: 8px;
 }
-/* --- Redesigned profile page --- */
+.mfp-hero .profile-quote {
+  position: relative;
+  z-index: 2;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
 .mfp-hero {
   position: relative;
   margin: 18px 26px 0;
@@ -2072,6 +2077,7 @@ textarea {
   background-size: cover;
   background-position: center;
   overflow: hidden;
+  isolation: isolate;
 }
 .mfp-hero::before {
   content: "";
@@ -2079,11 +2085,23 @@ textarea {
   inset: 0;
   background-image: radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.12), transparent 40%);
   pointer-events: none;
+  z-index: 0;
+}
+/* Darkens the lower portion of the hero so name/status/quote stay readable
+   over any cover photo, including very dark or very bright ones. */
+.mfp-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.15) 55%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
+  z-index: 0;
 }
 .mfp-edit-btn {
   position: absolute;
   top: 16px;
   right: 16px;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2104,6 +2122,7 @@ textarea {
   position: absolute;
   top: 16px;
   left: 16px;
+  z-index: 2;
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -2119,12 +2138,18 @@ textarea {
   background: rgba(15, 16, 26, 0.75);
 }
 .mfp-avatar-wrap {
-  padding-top: 44px;
-  z-index: 1;
+  position: relative;
+  width: 108px;
+  margin: 0 auto;
+  padding-top: 36px;
+  z-index: 2;
 }
 .mfp-avatar {
   width: 108px;
   height: 108px;
+  min-width: 108px;
+  min-height: 108px;
+  flex-shrink: 0;
   font-size: 30px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
@@ -2134,10 +2159,16 @@ textarea {
 }
 .mfp-identity {
   position: relative;
-  z-index: 1;
+  z-index: 2;
+}
+.mfp-identity .profile-name {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 0 14px rgba(0, 0, 0, 0.25);
 }
 .mfp-status {
   justify-content: center;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 .mfp-name-input {
   max-width: 240px;
@@ -2148,7 +2179,7 @@ textarea {
 }
 .mfp-tagline-edit {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   max-width: 340px;
   margin: 0 auto;
 }
