@@ -524,6 +524,7 @@ export async function getUserConversations(userId) {
     [userId]
   );
 
+  const liveRows = [];
   for (const conv of rows) {
     const [members] = await query(
       `SELECT u.id, u.username, u.phone_number AS "phoneNumber", u.avatar_url AS "avatarUrl",
@@ -544,11 +545,15 @@ export async function getUserConversations(userId) {
     conv.myRole = me?.isAdmin ? "admin" : me?.isOfficer ? "officer" : "member";
     if (conv.type === "direct") {
       const other = members.find((m) => m.id !== userId);
-      conv.name = other ? other.username : "Unknown";
-      conv.avatarUrl = other ? other.avatarUrl : null;
+      // The other user's account was deleted (their row no longer joins via
+      // conversation_members) — drop this conversation instead of showing "Unknown".
+      if (!other) continue;
+      conv.name = other.username;
+      conv.avatarUrl = other.avatarUrl;
     }
+    liveRows.push(conv);
   }
-  return rows;
+  return liveRows;
 }
 
 // Group admin/officer: set/change the group photo.
