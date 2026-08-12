@@ -304,6 +304,10 @@ export default function IconSprite() {
         <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M12 11v5" />
       </symbol>
 
+      <symbol id="exit-icon" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M15 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h9M10 12h11m0 0-4-4m4 4-4 4" />
+      </symbol>
+
       <symbol id="chevron-down-icon" viewBox="0 0 24 24">
         <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
       </symbol>

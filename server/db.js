@@ -548,12 +548,89 @@ export async function setConversationAvatar(conversationId, userId, avatarUrl) {
   return avatarUrl;
 }
 
+// Group admin-only: rename the group.
+export async function renameGroupConversation(conversationId, userId, name) {
+  const [rows] = await query(
+    "SELECT is_admin FROM conversation_members WHERE conversation_id = ? AND user_id = ?",
+    [conversationId, userId]
+  );
+  if (!rows[0]?.is_admin) return null;
+  const cleanName = name.toString().trim().slice(0, 80);
+  if (!cleanName) return null;
+  await query("UPDATE conversations SET name = ? WHERE id = ?", [cleanName, conversationId]);
+  return cleanName;
+}
+
 export async function isConversationAdmin(conversationId, userId) {
   const [rows] = await query(
     "SELECT is_admin FROM conversation_members WHERE conversation_id = ? AND user_id = ?",
     [conversationId, userId]
   );
   return !!rows[0]?.is_admin;
+}
+
+// Admin-only: permanently delete a group and everything tied to it (members, messages,
+// polls/votes, game history, wallpapers, cleared-chat markers — all via ON DELETE CASCADE).
+export async function deleteGroupConversation(conversationId, userId) {
+  const [rows] = await query("SELECT type FROM conversations WHERE id = ?", [conversationId]);
+  const conv = rows[0];
+  if (!conv || conv.type !== "group") return false;
+  const isAdmin = await isConversationAdmin(conversationId, userId);
+  if (!isAdmin) return false;
+  await query("DELETE FROM conversations WHERE id = ?", [conversationId]);
+  return true;
+}
+
+// A member leaves a group. If they were the only admin and others remain, promote the
+// longest-standing remaining member so the group always keeps an admin. If they were the
+// last member left, the (now-empty) group is deleted outright.
+export async function leaveGroupConversation(conversationId, userId) {
+  const [convRows] = await query("SELECT type FROM conversations WHERE id = ?", [conversationId]);
+  if (!convRows[0] || convRows[0].type !== "group") return { left: false };
+
+  const [memberRows] = await query(
+    "SELECT user_id, is_admin FROM conversation_members WHERE conversation_id = ?",
+    [conversationId]
+  );
+  const me = memberRows.find((m) => m.user_id === userId);
+  if (!me) return { left: false };
+
+  await query("DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?", [
+    conversationId,
+    userId,
+  ]);
+
+  const remaining = memberRows.filter((m) => m.user_id !== userId);
+  if (remaining.length === 0) {
+    await query("DELETE FROM conversations WHERE id = ?", [conversationId]);
+    return { left: true, deleted: true };
+  }
+
+  const stillHasAdmin = remaining.some((m) => m.is_admin);
+  if (!!me.is_admin && !stillHasAdmin) {
+    const [joinRows] = await query(
+      "SELECT user_id FROM conversation_members WHERE conversation_id = ? ORDER BY joined_at ASC LIMIT 1",
+      [conversationId]
+    );
+    const promoteId = joinRows[0]?.user_id;
+    if (promoteId) {
+      await query(
+        "UPDATE conversation_members SET is_admin = 1 WHERE conversation_id = ? AND user_id = ?",
+        [conversationId, promoteId]
+      );
+    }
+  }
+  return { left: true, deleted: false };
+}
+
+// Count of media/file messages shared in a conversation, for the "Media, Links & Files" row.
+export async function getConversationMediaCount(conversationId) {
+  const [rows] = await query(
+    `SELECT COUNT(*)::int AS count FROM messages
+     WHERE conversation_id = ? AND deleted = 0 AND type IN ('image', 'video', 'audio', 'file')`,
+    [conversationId]
+  );
+  return rows[0]?.count || 0;
 }
 
 export async function isConversationMember(conversationId, userId) {

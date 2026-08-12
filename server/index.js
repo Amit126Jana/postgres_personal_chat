@@ -52,6 +52,10 @@ import {
   listBlockedUsers,
   getPasswordHash,
   setPasswordHash,
+  deleteGroupConversation,
+  leaveGroupConversation,
+  getConversationMediaCount,
+  renameGroupConversation,
 } from "./db.js";
 import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_PLAYER_GAMES } from "./games.js";
 import { recordGameResult, getGameHistory } from "./db.js";
@@ -971,6 +975,86 @@ io.on("connection", async (socket) => {
       io.to(convRoom(conversationId)).emit("group:avatar:updated", { conversationId, avatarUrl: saved });
     } catch (err) {
       console.error("group:avatar failed", err.message);
+    }
+  });
+
+  // --- Group admin: rename the group ---
+  socket.on("group:rename", async ({ conversationId, name }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me || !conversationId || !name?.toString().trim()) return;
+    try {
+      const saved = await renameGroupConversation(conversationId, me.userId, name);
+      if (saved === null) {
+        socket.emit("message:error", { message: "Only a group admin can rename the group" });
+        return;
+      }
+      io.to(convRoom(conversationId)).emit("group:renamed", { conversationId, name: saved });
+    } catch (err) {
+      console.error("group:rename failed", err.message);
+    }
+  });
+
+  // --- Group admin: permanently delete the group and everything in it ---
+  socket.on("group:delete", async ({ conversationId }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me || !conversationId) return;
+    try {
+      const memberIds = await getConversationMemberIds(conversationId);
+      const ok = await deleteGroupConversation(conversationId, me.userId);
+      if (!ok) {
+        socket.emit("message:error", { message: "Only a group admin can delete this group" });
+        return;
+      }
+      for (const memberId of memberIds) {
+        for (const sid of userSockets.get(memberId) || []) {
+          io.sockets.sockets.get(sid)?.leave(convRoom(conversationId));
+          io.to(sid).emit("conversation:deleted", { conversationId });
+        }
+      }
+    } catch (err) {
+      console.error("group:delete failed", err.message);
+    }
+  });
+
+  // --- Leave a group. Promotes a new admin if you were the only one, or deletes the
+  // group outright if you were the last member left. ---
+  socket.on("group:leave", async ({ conversationId }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me || !conversationId) return;
+    try {
+      const memberIdsBefore = await getConversationMemberIds(conversationId);
+      const result = await leaveGroupConversation(conversationId, me.userId);
+      if (!result.left) return;
+
+      for (const sid of userSockets.get(me.userId) || []) {
+        io.sockets.sockets.get(sid)?.leave(convRoom(conversationId));
+        io.to(sid).emit("conversation:deleted", { conversationId });
+      }
+
+      if (!result.deleted) {
+        const remainingIds = memberIdsBefore.filter((id) => id !== me.userId);
+        for (const memberId of remainingIds) {
+          const [updated] = (await getUserConversations(memberId)).filter((c) => c.id === conversationId);
+          for (const sid of userSockets.get(memberId) || []) {
+            io.to(sid).emit("conversation:updated", updated);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("group:leave failed", err.message);
+    }
+  });
+
+  // --- Fetch info for the Group/User info panel (member list, media count, etc.) ---
+  socket.on("conversation:info", async ({ conversationId }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me || !conversationId) return;
+    try {
+      if (!(await isConversationMember(conversationId, me.userId))) return;
+      const mediaCount = await getConversationMediaCount(conversationId);
+      socket.emit("conversation:info", { conversationId, mediaCount });
+    } catch (err) {
+      console.error("conversation:info failed", err.message);
     }
   });
 

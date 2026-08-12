@@ -7,6 +7,8 @@ import CallOverlay from "./CallOverlay.jsx";
 import GroupCallOverlay from "./GroupCallOverlay.jsx";
 import NewChatModal from "./NewChatModal.jsx";
 import ImageCropModal from "./ImageCropModal.jsx";
+import GroupInfoPanel from "./GroupInfoPanel.jsx";
+import UserProfilePanel from "./UserProfilePanel.jsx";
 import IconSprite from "./Icons.jsx";
 import SettingsPanel, { THEME_COLORS, resolveThemeColor } from "./SettingsPanel.jsx";
 import ProfilePage from "./ProfilePage.jsx";
@@ -108,6 +110,14 @@ function App() {
   function pickGroupAvatarWithCrop(conversationId, file) {
     openCrop(file, { shape: "circle", onDone: (f) => handleGroupAvatarUpload(conversationId, f) });
   }
+
+  // --- Full-size avatar preview (lightbox) ---
+  const [lightboxImage, setLightboxImage] = useState(null); // url string | null
+
+  // --- Group Info / User Profile side panels ---
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [showUserInfo, setShowUserInfo] = useState(false);
+  const [convInfoByConv, setConvInfoByConv] = useState({}); // { [conversationId]: { mediaCount } }
 
   // --- Conversations & messages ---
   const [conversations, setConversations] = useState([]);
@@ -794,6 +804,35 @@ function App() {
       );
     });
 
+    socket.on("group:renamed", ({ conversationId, name }) => {
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? { ...c, name } : c)),
+      );
+    });
+
+    // A group I'm in was renamed / got new members / etc.
+    socket.on("conversation:updated", (conv) => {
+      if (!conv) return;
+      setConversations((prev) => {
+        const exists = prev.some((c) => c.id === conv.id);
+        return exists
+          ? prev.map((c) => (c.id === conv.id ? conv : c))
+          : [conv, ...prev];
+      });
+    });
+
+    // A group was deleted, or I left/was removed from it — drop it from my list.
+    socket.on("conversation:deleted", ({ conversationId }) => {
+      setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+      setActiveConvId((prev) => (prev === conversationId ? null : prev));
+      setShowGroupInfo(false);
+      setShowUserInfo(false);
+    });
+
+    socket.on("conversation:info", ({ conversationId, mediaCount }) => {
+      setConvInfoByConv((prev) => ({ ...prev, [conversationId]: { mediaCount } }));
+    });
+
     socket.on("message:error", ({ message: msg }) => {
       setGameError(msg);
       setTimeout(() => setGameError(""), 4000);
@@ -1304,8 +1343,7 @@ function App() {
     setShowNewChat(false);
   }
 
-  async function startGroupChat(name, memberIds, avatarFile) {
-    let avatarUrl = null;
+  async function startGroupChat(name, memberIds, avatarFile) {    let avatarUrl = null;
     if (avatarFile) {
       try {
         const { mediaUrl } = await uploadFile(avatarFile);
@@ -1553,6 +1591,33 @@ function App() {
     setClearedAt((prev) => ({ ...prev, [activeConvId]: Date.now() }));
   }
 
+  function openInfoPanel() {
+    setShowChatMenu(false);
+    if (!activeConvId) return;
+    socket.emit("conversation:info", { conversationId: activeConvId });
+    if (activeConv?.type === "group") setShowGroupInfo(true);
+    else setShowUserInfo(true);
+  }
+
+  function requestDeleteGroup(conversationId) {
+    setShowChatMenu(false);
+    if (!conversationId) return;
+    if (
+      !window.confirm(
+        "Delete this group for everyone? All messages, media, and shared files will be permanently deleted. This can't be undone.",
+      )
+    )
+      return;
+    socket.emit("group:delete", { conversationId });
+  }
+
+  function requestLeaveGroup(conversationId) {
+    setShowChatMenu(false);
+    if (!conversationId) return;
+    if (!window.confirm("Leave this group? You'll stop receiving messages from it.")) return;
+    socket.emit("group:leave", { conversationId });
+  }
+
   async function handleWallpaperFilePicked(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -1581,6 +1646,24 @@ function App() {
   function otherMemberOf(conv) {
     if (!conv || conv.type !== "direct") return null;
     return conv.members?.find((m) => m.id !== userId) || null;
+  }
+
+  function renameGroup(conversationId, name) {
+    socket.emit("group:rename", { conversationId, name });
+  }
+
+  async function handleBlockUser(otherUserId) {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/blocked/${otherUserId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${tokenRef.current}` },
+      });
+      if (!res.ok) throw new Error("Block failed");
+      pushToast("User blocked", "You won't receive messages or calls from them.");
+      setShowUserInfo(false);
+    } catch (err) {
+      pushToast("Couldn't block user", err.message || "Please try again.");
+    }
   }
 
   // Best-effort avatar lookup for an incoming call, before we have anything richer than
@@ -2142,26 +2225,44 @@ function App() {
                     ←
                   </button>
                   {activeConv.type === "group" ? (
-                    <span
-                      className={
-                        "room-avatar" + (activeConv.myIsAdmin ? " room-avatar-editable" : "")
-                      }
-                      title={activeConv.myIsAdmin ? "Change group photo" : ""}
-                      onClick={() => {
-                        if (activeConv.myIsAdmin) groupAvatarInputRef.current?.click();
-                      }}
-                    >
-                      {activeConv.avatarUrl ? (
-                        <img src={mediaSrc(activeConv.avatarUrl)} alt="" />
-                      ) : (
-                        "👥"
-                      )}
-                      {groupAvatarUploading && (
-                        <span className="room-avatar-spinner" />
+                    <span className="room-avatar-wrap">
+                      <span
+                        className="room-avatar"
+                        title="View group photo"
+                        onClick={() => {
+                          if (activeConv.avatarUrl) setLightboxImage(mediaSrc(activeConv.avatarUrl));
+                        }}
+                      >
+                        {activeConv.avatarUrl ? (
+                          <img src={mediaSrc(activeConv.avatarUrl)} alt="" />
+                        ) : (
+                          "👥"
+                        )}
+                        {groupAvatarUploading && (
+                          <span className="room-avatar-spinner" />
+                        )}
+                      </span>
+                      {activeConv.myIsAdmin && (
+                        <button
+                          type="button"
+                          className="room-avatar-edit-badge"
+                          title="Change group photo"
+                          onClick={() => groupAvatarInputRef.current?.click()}
+                        >
+                          <svg className="icon" width="11" height="11">
+                            <use href="#camera-icon" />
+                          </svg>
+                        </button>
                       )}
                     </span>
                   ) : (
-                    <span className="room-avatar">
+                    <span
+                      className="room-avatar"
+                      title="View photo"
+                      onClick={() => {
+                        if (activeConv.avatarUrl) setLightboxImage(mediaSrc(activeConv.avatarUrl));
+                      }}
+                    >
                       {activeConv.avatarUrl ? (
                         <img src={mediaSrc(activeConv.avatarUrl)} alt="" />
                       ) : (
@@ -2182,7 +2283,7 @@ function App() {
                       }}
                     />
                   )}
-                  <span className="room-identity">
+                  <span className="room-identity" onClick={openInfoPanel} title="View info" style={{ cursor: "pointer" }}>
                     <span className="room-title-text">{activeConv.name}</span>
                   </span>
                   {activeConv.type === "direct" &&
@@ -2331,6 +2432,10 @@ function App() {
                       <>
                         <div className="chat-menu-backdrop" onClick={() => setShowChatMenu(false)} />
                         <div className="chat-menu-dropdown">
+                          <button type="button" onClick={openInfoPanel}>
+                            <svg className="icon" width="15" height="15"><use href="#info-icon" /></svg>
+                            Info
+                          </button>
                           <button type="button" onClick={() => startSelectMode(null)}>
                             Select messages
                           </button>
@@ -2346,6 +2451,26 @@ function App() {
                           <button type="button" onClick={requestClearChat}>
                             Clear chat
                           </button>
+                          {activeConv.type === "group" && activeConv.myIsAdmin && (
+                            <button
+                              type="button"
+                              className="chat-menu-danger"
+                              onClick={() => requestDeleteGroup(activeConv.id)}
+                            >
+                              <svg className="icon" width="15" height="15"><use href="#delete-trash-icon" /></svg>
+                              Delete Group
+                            </button>
+                          )}
+                          {activeConv.type === "group" && (
+                            <button
+                              type="button"
+                              className="chat-menu-danger"
+                              onClick={() => requestLeaveGroup(activeConv.id)}
+                            >
+                              <svg className="icon" width="15" height="15"><use href="#exit-icon" /></svg>
+                              Leave Group
+                            </button>
+                          )}
                         </div>
                       </>
                     )}
@@ -2946,6 +3071,75 @@ function App() {
             cropTask.onDone(cropped);
             setCropTask(null);
           }}
+        />
+      )}
+
+      {lightboxImage && (
+        <div className="lightbox-backdrop" onClick={() => setLightboxImage(null)}>
+          <button
+            type="button"
+            className="lightbox-close"
+            onClick={() => setLightboxImage(null)}
+            aria-label="Close"
+          >
+            <svg className="icon" width="20" height="20"><use href="#close-icon" /></svg>
+          </button>
+          <img src={lightboxImage} alt="" className="lightbox-image" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
+
+      {showGroupInfo && activeConv?.type === "group" && (
+        <GroupInfoPanel
+          conv={{
+            ...activeConv,
+            avatarUrl: activeConv.avatarUrl ? mediaSrc(activeConv.avatarUrl) : null,
+            members: (activeConv.members || []).map((m) => ({
+              ...m,
+              avatarUrl: m.avatarUrl ? mediaSrc(m.avatarUrl) : null,
+            })),
+          }}
+          myUserId={userId}
+          mediaCount={convInfoByConv[activeConv.id]?.mediaCount}
+          uploading={groupAvatarUploading}
+          onClose={() => setShowGroupInfo(false)}
+          onOpenAvatar={(url) => setLightboxImage(url)}
+          onPickAvatar={() => groupAvatarInputRef.current?.click()}
+          onRename={(name) => renameGroup(activeConv.id, name)}
+          onAudioCall={() => {
+            socket.emit("group-call:start", { conversationId: activeConv.id });
+            setGroupCallConvId(activeConv.id);
+          }}
+          onVideoCall={() => {
+            socket.emit("group-call:start", { conversationId: activeConv.id });
+            setGroupCallConvId(activeConv.id);
+          }}
+          onOpenMember={() => {}}
+          onDeleteGroup={() => requestDeleteGroup(activeConv.id)}
+          onLeaveGroup={() => requestLeaveGroup(activeConv.id)}
+        />
+      )}
+
+      {showUserInfo && activeConv?.type === "direct" && (
+        <UserProfilePanel
+          user={{
+            ...otherMemberOf(activeConv),
+            avatarUrl: activeConv.avatarUrl ? mediaSrc(activeConv.avatarUrl) : null,
+          }}
+          mediaCount={convInfoByConv[activeConv.id]?.mediaCount}
+          onClose={() => setShowUserInfo(false)}
+          onOpenAvatar={(url) => setLightboxImage(url)}
+          onMessage={() => setShowUserInfo(false)}
+          onAudioCall={() => {
+            const other = otherMemberOf(activeConv);
+            if (other) startCall(other.id, other.username, activeConv.avatarUrl, "audio");
+            setShowUserInfo(false);
+          }}
+          onVideoCall={() => {
+            const other = otherMemberOf(activeConv);
+            if (other) startCall(other.id, other.username, activeConv.avatarUrl, "video");
+            setShowUserInfo(false);
+          }}
+          onBlock={handleBlockUser}
         />
       )}
 
