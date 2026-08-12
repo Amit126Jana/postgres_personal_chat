@@ -946,6 +946,25 @@ function App() {
       });
     });
 
+    // Anyone reacted to a message in a conversation I'm in — keeps the roster
+    // preview ("X reacted 😍 to a message") in sync for every participant.
+    socket.on("reaction:activity", ({ conversationId, emoji, fromUsername }) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === conversationId
+            ? {
+                ...c,
+                lastReaction: {
+                  fromUsername,
+                  emoji,
+                  createdAt: new Date().toISOString(),
+                },
+              }
+            : c,
+        ),
+      );
+    });
+
     // Someone reacted (emoji, sticker, voice, or video reaction) to one of my messages.
     socket.on("reaction:notify", (payload) => {
       notifyReaction(payload);
@@ -2190,7 +2209,7 @@ function App() {
                     <span className="roster-preview">
                       {c.lastReaction &&
                       (!c.lastMessage || c.lastReaction.createdAt > c.lastMessage.createdAt)
-                        ? `${c.lastReaction.fromUsername} reacted ${labelForReactionKey(c.lastReaction.emoji)} to your message`
+                        ? `${c.lastReaction.fromUsername} reacted ${labelForReactionKey(c.lastReaction.emoji)} to a message`
                         : previewForLastMessage(c.lastMessage)}
                     </span>
                   </span>

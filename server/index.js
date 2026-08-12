@@ -1366,9 +1366,21 @@ io.on("connection", async (socket) => {
     }
     io.to(convRoom(conversationId)).emit("reaction", { messageId, reactions: summary });
 
-    // Only notify on adding a reaction (not removing one), and only the message's
-    // author — not every conversation member — same as a like/reaction notification
-    // in most chat apps. Skip self-reactions.
+    // Broadcast a lightweight activity ping to everyone in the room (including the
+    // reactor) so the roster preview ("X reacted 😍 to a message") stays in sync for
+    // all participants, not just the message's author.
+    if (added) {
+      io.to(convRoom(conversationId)).emit("reaction:activity", {
+        conversationId,
+        messageId,
+        emoji,
+        fromUsername: me.username,
+      });
+    }
+
+    // Only notify (toast/desktop notification) on adding a reaction (not removing
+    // one), and only the message's author — not every conversation member. Skip
+    // self-reactions for the notification (the activity ping above still covers them).
     if (added) {
       try {
         const ownerId = await getMessageOwner(messageId);
