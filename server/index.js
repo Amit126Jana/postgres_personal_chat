@@ -791,13 +791,14 @@ io.on("connection", async (socket) => {
   });
 
   // --- Create a group chat ---
-  socket.on("conversation:group", async ({ name, memberIds }) => {
+  socket.on("conversation:group", async ({ name, memberIds, avatarUrl }) => {
     const me = onlineUsers.get(socket.id);
     if (!me || !name?.toString().trim()) return;
     try {
       const cleanName = name.toString().trim().slice(0, 80);
       const ids = Array.isArray(memberIds) ? memberIds.filter((id) => id !== me.userId) : [];
-      const conversationId = await createGroupConversation(cleanName, me.userId, ids);
+      const cleanAvatarUrl = typeof avatarUrl === "string" && avatarUrl.trim() ? avatarUrl.trim() : null;
+      const conversationId = await createGroupConversation(cleanName, me.userId, ids, cleanAvatarUrl);
       const [conversation] = (await getUserConversations(me.userId)).filter((c) => c.id === conversationId);
 
       for (const memberId of [me.userId, ...ids]) {

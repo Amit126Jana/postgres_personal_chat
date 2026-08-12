@@ -4444,3 +4444,130 @@ label.modal-user-row {
   color: var(--text-muted);
   text-align: center;
 }
+/* ===== Image Crop Modal ===== */
+.crop-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 10, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.crop-panel {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface, #17171f);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+.crop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.crop-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+.crop-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.crop-hint {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.crop-viewport {
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto;
+  background: #000;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.crop-viewport:active {
+  cursor: grabbing;
+}
+.crop-viewport-circle {
+  border-radius: 50%;
+}
+.crop-viewport-rect {
+  border-radius: 14px;
+}
+.crop-image {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+}
+.crop-mask {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
+.crop-viewport-circle .crop-mask {
+  border-radius: 50%;
+}
+.crop-viewport-rect .crop-mask {
+  border-radius: 14px;
+}
+.crop-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 4px 4px;
+  color: var(--text-muted);
+}
+.crop-zoom-slider {
+  flex: 1;
+  accent-color: var(--signal);
+}
+.crop-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+.crop-btn {
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+}
+.crop-btn-secondary {
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  color: var(--text);
+}
+.crop-btn-primary {
+  background: var(--signal-gradient, var(--signal));
+  color: #fff;
+}
+.crop-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.np-avatar-circle {
+  overflow: hidden;
+}
+.np-avatar-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}

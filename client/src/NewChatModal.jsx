@@ -1,6 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ImageCropModal from "./ImageCropModal.jsx";
 
-export default function NewChatModal({ serverUrl, token, myUserId, onStartDirect, onStartGroup, onClose, initialMode }) {
+export default function NewChatModal({
+  serverUrl,
+  token,
+  myUserId,
+  onStartDirect,
+  onStartGroup,
+  onClose,
+  initialMode,
+}) {
   const [mode, setMode] = useState(initialMode === "group" ? "group" : "direct"); // "direct" | "group"
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -8,6 +17,32 @@ export default function NewChatModal({ serverUrl, token, myUserId, onStartDirect
   const [selectedIds, setSelectedIds] = useState([]);
   const [search, setSearch] = useState("");
   const MAX_MEMBERS = 100;
+
+  // --- Group photo: pick -> crop -> preview ---
+  const groupAvatarInputRef = useRef(null);
+  const [pendingCropFile, setPendingCropFile] = useState(null); // raw file awaiting crop
+  const [groupAvatarFile, setGroupAvatarFile] = useState(null); // cropped File ready to upload
+  const [groupAvatarPreview, setGroupAvatarPreview] = useState(null);
+
+  useEffect(() => {
+    return () => {
+      if (groupAvatarPreview) URL.revokeObjectURL(groupAvatarPreview);
+    };
+  }, [groupAvatarPreview]);
+
+  function handleGroupPhotoChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) setPendingCropFile(file);
+  }
+
+  function handleCropConfirm(blob) {
+    const cropped = new File([blob], "group-avatar.jpg", { type: "image/jpeg" });
+    if (groupAvatarPreview) URL.revokeObjectURL(groupAvatarPreview);
+    setGroupAvatarFile(cropped);
+    setGroupAvatarPreview(URL.createObjectURL(cropped));
+    setPendingCropFile(null);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +85,7 @@ export default function NewChatModal({ serverUrl, token, myUserId, onStartDirect
   function handleCreateGroup(e) {
     e.preventDefault();
     if (!groupName.trim() || selectedIds.length === 0) return;
-    onStartGroup(groupName.trim(), selectedIds);
+    onStartGroup(groupName.trim(), selectedIds, groupAvatarFile);
   }
 
   return (
@@ -91,12 +126,36 @@ export default function NewChatModal({ serverUrl, token, myUserId, onStartDirect
           {mode === "group" && (
             <>
               <div className="np-avatar-upload">
-                <div className="np-avatar-circle">
-                  <svg className="icon" width="28" height="28">
-                    <use href="#camera-icon" />
-                  </svg>
+                <div
+                  className="np-avatar-circle"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => groupAvatarInputRef.current?.click()}
+                  onKeyDown={(e) => e.key === "Enter" && groupAvatarInputRef.current?.click()}
+                >
+                  {groupAvatarPreview ? (
+                    <img src={groupAvatarPreview} alt="Group" />
+                  ) : (
+                    <svg className="icon" width="28" height="28">
+                      <use href="#camera-icon" />
+                    </svg>
+                  )}
                 </div>
-                <span className="np-avatar-plus">+</span>
+                <span
+                  className="np-avatar-plus"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => groupAvatarInputRef.current?.click()}
+                >
+                  +
+                </span>
+                <input
+                  ref={groupAvatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={handleGroupPhotoChange}
+                />
               </div>
 
               <label className="np-field-label" htmlFor="np-group-name">
@@ -203,6 +262,15 @@ export default function NewChatModal({ serverUrl, token, myUserId, onStartDirect
           </form>
         )}
       </div>
+
+      {pendingCropFile && (
+        <ImageCropModal
+          file={pendingCropFile}
+          shape="circle"
+          onCancel={() => setPendingCropFile(null)}
+          onConfirm={handleCropConfirm}
+        />
+      )}
     </div>
   );
 }

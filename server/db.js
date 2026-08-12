@@ -485,10 +485,10 @@ export async function getOrCreateDirectConversation(userIdA, userIdB) {
 
 // Creates a named group conversation. memberIds should NOT include the creator (added automatically).
 // The creator is made a group admin.
-export async function createGroupConversation(name, creatorId, memberIds = []) {
+export async function createGroupConversation(name, creatorId, memberIds = [], avatarUrl = null) {
   const [inserted] = await query(
-    "INSERT INTO conversations (type, name, created_by) VALUES ('group', ?, ?) RETURNING id",
-    [name, creatorId]
+    "INSERT INTO conversations (type, name, created_by, avatar_url) VALUES ('group', ?, ?, ?) RETURNING id",
+    [name, creatorId, avatarUrl]
   );
   const conversationId = inserted[0].id;
   const allIds = [...new Set([creatorId, ...memberIds])];

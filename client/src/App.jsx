@@ -6,6 +6,7 @@ import ReactionPicker from "./ReactionPicker.jsx";
 import CallOverlay from "./CallOverlay.jsx";
 import GroupCallOverlay from "./GroupCallOverlay.jsx";
 import NewChatModal from "./NewChatModal.jsx";
+import ImageCropModal from "./ImageCropModal.jsx";
 import IconSprite from "./Icons.jsx";
 import SettingsPanel, { THEME_COLORS, resolveThemeColor } from "./SettingsPanel.jsx";
 import ProfilePage from "./ProfilePage.jsx";
@@ -91,6 +92,22 @@ function App() {
   const [groupAvatarUploading, setGroupAvatarUploading] = useState(false);
   const groupAvatarInputRef = useRef(null);
   const [resuming, setResuming] = useState(false); // auto-relogin in progress after a page refresh
+
+  // --- Shared "pick photo -> crop -> confirm" flow, used by every avatar/cover picker ---
+  const [cropTask, setCropTask] = useState(null); // { file, shape, aspect, onDone }
+  function openCrop(file, { shape = "circle", aspect = 1, onDone }) {
+    if (!file) return;
+    setCropTask({ file, shape, aspect, onDone });
+  }
+  function pickAvatarWithCrop(file) {
+    openCrop(file, { shape: "circle", onDone: handleAvatarUpload });
+  }
+  function pickCoverWithCrop(file) {
+    openCrop(file, { shape: "rect", aspect: 16 / 9, onDone: handleCoverUpload });
+  }
+  function pickGroupAvatarWithCrop(conversationId, file) {
+    openCrop(file, { shape: "circle", onDone: (f) => handleGroupAvatarUpload(conversationId, f) });
+  }
 
   // --- Conversations & messages ---
   const [conversations, setConversations] = useState([]);
@@ -1287,8 +1304,18 @@ function App() {
     setShowNewChat(false);
   }
 
-  function startGroupChat(name, memberIds) {
-    socket.emit("conversation:group", { name, memberIds });
+  async function startGroupChat(name, memberIds, avatarFile) {
+    let avatarUrl = null;
+    if (avatarFile) {
+      try {
+        const { mediaUrl } = await uploadFile(avatarFile);
+        avatarUrl = mediaSrc(mediaUrl);
+      } catch (err) {
+        console.error("Group avatar upload failed", err);
+        pushToast("Upload failed", "Group was created without a photo — try changing it from the chat.");
+      }
+    }
+    socket.emit("conversation:group", { name, memberIds, avatarUrl });
     setShowNewChat(false);
   }
 
@@ -1817,8 +1844,8 @@ function App() {
           uploading={avatarUploading}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode((v) => !v)}
-          onUploadAvatar={handleAvatarUpload}
-          onUploadCover={handleCoverUpload}
+          onUploadAvatar={pickAvatarWithCrop}
+          onUploadCover={pickCoverWithCrop}
           onSave={saveProfile}
           onLogout={logout}
           onDeleteAccount={handleDeleteAccount}
@@ -1838,8 +1865,8 @@ function App() {
             games: gamesPlayedCount,
           }}
           uploading={avatarUploading}
-          onUploadAvatar={handleAvatarUpload}
-          onUploadCover={handleCoverUpload}
+          onUploadAvatar={pickAvatarWithCrop}
+          onUploadCover={pickCoverWithCrop}
           onSave={saveProfile}
           onClose={() => setActiveView("chats")}
         />
@@ -2150,7 +2177,7 @@ function App() {
                       style={{ display: "none" }}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) handleGroupAvatarUpload(activeConv.id, file);
+                        if (file) pickGroupAvatarWithCrop(activeConv.id, file);
                         e.target.value = "";
                       }}
                     />
@@ -2905,6 +2932,20 @@ function App() {
           onStartGroup={startGroupChat}
           onClose={() => setShowNewChat(false)}
           initialMode={newChatMode}
+        />
+      )}
+
+      {cropTask && (
+        <ImageCropModal
+          file={cropTask.file}
+          shape={cropTask.shape}
+          aspect={cropTask.aspect}
+          onCancel={() => setCropTask(null)}
+          onConfirm={(blob) => {
+            const cropped = new File([blob], "photo.jpg", { type: "image/jpeg" });
+            cropTask.onDone(cropped);
+            setCropTask(null);
+          }}
         />
       )}
 
