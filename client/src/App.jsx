@@ -572,6 +572,29 @@ function App() {
     return key; // plain emoji or sticker character
   }
 
+  // One-line roster preview for a conversation's last message. A live reaction
+  // (see reaction:notify below) temporarily overrides this if it's more recent.
+  function previewForLastMessage(lastMessage) {
+    if (!lastMessage) return "";
+    const who = lastMessage.mine ? "You" : lastMessage.senderUsername;
+    switch (lastMessage.type) {
+      case "image":
+        return `${who}: 📷 Photo`;
+      case "video":
+        return `${who}: 🎥 Video`;
+      case "audio":
+        return `${who}: 🎙️ Voice message`;
+      case "file":
+        return `${who}: 📄 ${lastMessage.mediaName || "File"}`;
+      case "game":
+        return `${who}: 🎮 ${lastMessage.text || "Played a game"}`;
+      case "poll":
+        return `${who}: 📊 Poll`;
+      default:
+        return `${who}: ${lastMessage.text || ""}`;
+    }
+  }
+
   function notifyReaction({ conversationId, emoji, fromUsername }) {
     const conv = conversationsRef.current.find((c) => c.id === conversationId);
     const title = conv?.type === "group" ? `${fromUsername} in ${conv.name}` : fromUsername;
@@ -755,6 +778,26 @@ function App() {
         };
       });
 
+      // Keep the roster preview in sync with the newest message.
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === msg.conversationId
+            ? {
+                ...c,
+                lastMessage: {
+                  type: msg.type,
+                  text: msg.text,
+                  mediaName: msg.mediaName,
+                  senderUsername: msg.username,
+                  mine: msg.username === usernameRef.current,
+                  createdAt: msg.createdAt,
+                },
+                lastReaction: null,
+              }
+            : c,
+        ),
+      );
+
       const isMine = msg.username === usernameRef.current;
       const isActive =
         msg.conversationId === activeConvIdRef.current && !document.hidden;
@@ -906,6 +949,21 @@ function App() {
     // Someone reacted (emoji, sticker, voice, or video reaction) to one of my messages.
     socket.on("reaction:notify", (payload) => {
       notifyReaction(payload);
+      const { conversationId, emoji, fromUsername } = payload;
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === conversationId
+            ? {
+                ...c,
+                lastReaction: {
+                  fromUsername,
+                  emoji,
+                  createdAt: new Date().toISOString(),
+                },
+              }
+            : c,
+        ),
+      );
     });
 
     // --- Call signaling ---
@@ -2122,11 +2180,19 @@ function App() {
                       initials(c.name)
                     )}
                   </span>
-                  <span className="roster-name">
-                    {c.name}
-                    {c.type === "group" && (
-                      <span className="conv-badge">group</span>
-                    )}
+                  <span className="roster-text-col">
+                    <span className="roster-name">
+                      {c.name}
+                      {c.type === "group" && (
+                        <span className="conv-badge">group</span>
+                      )}
+                    </span>
+                    <span className="roster-preview">
+                      {c.lastReaction &&
+                      (!c.lastMessage || c.lastReaction.createdAt > c.lastMessage.createdAt)
+                        ? `${c.lastReaction.fromUsername} reacted ${labelForReactionKey(c.lastReaction.emoji)} to your message`
+                        : previewForLastMessage(c.lastMessage)}
+                    </span>
                   </span>
                   {unreadByConv[c.id] > 0 && (
                     <span className="unread-badge">{unreadByConv[c.id]}</span>

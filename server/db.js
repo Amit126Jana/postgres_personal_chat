@@ -566,6 +566,22 @@ export async function getUserConversations(userId) {
       conv.name = other.username;
       conv.avatarUrl = other.avatarUrl;
     }
+
+    // Preview for the roster row: the most recent non-deleted message, if any.
+    const [lastMsgRows] = await query(
+      `SELECT msg.id, msg.type, msg.text, msg.media_name AS "mediaName",
+              msg.created_at AS "createdAt", u.id AS "senderId", u.username AS "senderUsername"
+       FROM messages msg
+       JOIN users u ON u.id = msg.user_id
+       WHERE msg.conversation_id = ? AND msg.deleted = 0
+       ORDER BY msg.created_at DESC
+       LIMIT 1`,
+      [conv.id]
+    );
+    conv.lastMessage = lastMsgRows[0]
+      ? { ...lastMsgRows[0], mine: lastMsgRows[0].senderId === userId }
+      : null;
+
     liveRows.push(conv);
   }
   return liveRows;
