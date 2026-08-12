@@ -629,10 +629,15 @@ export default function GameOverlay({
   const opponentId = session.players.find((id) => id !== myUserId);
   const opponent = members.find((m) => m.id === opponentId) || null;
 
+  const [confirmingExit, setConfirmingExit] = useState(false);
+
   function handleExit() {
-    if (window.confirm("Exit this game? It will count as a loss (forfeit) for you.")) {
-      onForfeit(session);
-    }
+    setConfirmingExit(true);
+  }
+
+  function confirmExit() {
+    setConfirmingExit(false);
+    onForfeit(session);
   }
 
   // --- Sender view: invite just sent, waiting for the other player to accept ---
@@ -809,6 +814,37 @@ export default function GameOverlay({
           </div>
         )}
       </div>
+
+      {confirmingExit && (
+        <div className="game-exit-confirm-backdrop" onClick={() => setConfirmingExit(false)}>
+          <div className="game-exit-confirm-card" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setConfirmingExit(false)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+            <div className="game-exit-confirm-icon">🚪</div>
+            <h3 className="game-exit-confirm-title">Exit Game?</h3>
+            <p className="game-exit-confirm-sub">
+              Leaving now will count as a <b>loss (forfeit)</b>.
+            </p>
+            <div className="game-exit-confirm-warning">
+              <span aria-hidden="true">⚠️</span> Your opponent will be declared the winner.
+            </div>
+            <div className="game-exit-confirm-actions">
+              <button type="button" className="game-exit-confirm-cancel" onClick={() => setConfirmingExit(false)}>
+                Cancel
+              </button>
+              <button type="button" className="game-exit-confirm-yes" onClick={confirmExit}>
+                <span aria-hidden="true">🚪</span> Yes, Exit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
