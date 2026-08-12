@@ -88,6 +88,11 @@ export async function initDb() {
     )
   `);
 
+  // Officer role: a step below admin. Officers can add/remove regular members and manage
+  // the group day-to-day, but cannot remove an admin, cannot promote/demote anyone to or
+  // from admin/officer, and cannot delete the group. Only an admin can do those.
+  await query(`ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS is_officer SMALLINT NOT NULL DEFAULT 0`);
+
   // Who a user has blocked, from the Settings > Privacy & Security > Blocked users list.
   await query(`
     CREATE TABLE IF NOT EXISTS blocked_users (
@@ -521,13 +526,22 @@ export async function getUserConversations(userId) {
 
   for (const conv of rows) {
     const [members] = await query(
-      `SELECT u.id, u.username, u.phone_number AS "phoneNumber", u.avatar_url AS "avatarUrl", cm.is_admin AS "isAdmin"
+      `SELECT u.id, u.username, u.phone_number AS "phoneNumber", u.avatar_url AS "avatarUrl",
+              cm.is_admin AS "isAdmin", cm.is_officer AS "isOfficer"
        FROM conversation_members cm JOIN users u ON u.id = cm.user_id
        WHERE cm.conversation_id = ?`,
       [conv.id]
     );
-    conv.members = members.map((m) => ({ ...m, isAdmin: !!m.isAdmin }));
-    conv.myIsAdmin = !!members.find((m) => m.id === userId)?.isAdmin;
+    conv.members = members.map((m) => ({
+      ...m,
+      isAdmin: !!m.isAdmin,
+      isOfficer: !!m.isOfficer,
+      role: m.isAdmin ? "admin" : m.isOfficer ? "officer" : "member",
+    }));
+    const me = members.find((m) => m.id === userId);
+    conv.myIsAdmin = !!me?.isAdmin;
+    conv.myIsOfficer = !!me?.isOfficer;
+    conv.myRole = me?.isAdmin ? "admin" : me?.isOfficer ? "officer" : "member";
     if (conv.type === "direct") {
       const other = members.find((m) => m.id !== userId);
       conv.name = other ? other.username : "Unknown";
@@ -537,24 +551,24 @@ export async function getUserConversations(userId) {
   return rows;
 }
 
-// Group admin-only: set/change the group photo.
+// Group admin/officer: set/change the group photo.
 export async function setConversationAvatar(conversationId, userId, avatarUrl) {
   const [rows] = await query(
-    "SELECT is_admin FROM conversation_members WHERE conversation_id = ? AND user_id = ?",
+    "SELECT is_admin, is_officer FROM conversation_members WHERE conversation_id = ? AND user_id = ?",
     [conversationId, userId]
   );
-  if (!rows[0]?.is_admin) return null;
+  if (!rows[0]?.is_admin && !rows[0]?.is_officer) return null;
   await query("UPDATE conversations SET avatar_url = ? WHERE id = ?", [avatarUrl, conversationId]);
   return avatarUrl;
 }
 
-// Group admin-only: rename the group.
+// Group admin/officer: rename the group.
 export async function renameGroupConversation(conversationId, userId, name) {
   const [rows] = await query(
-    "SELECT is_admin FROM conversation_members WHERE conversation_id = ? AND user_id = ?",
+    "SELECT is_admin, is_officer FROM conversation_members WHERE conversation_id = ? AND user_id = ?",
     [conversationId, userId]
   );
-  if (!rows[0]?.is_admin) return null;
+  if (!rows[0]?.is_admin && !rows[0]?.is_officer) return null;
   const cleanName = name.toString().trim().slice(0, 80);
   if (!cleanName) return null;
   await query("UPDATE conversations SET name = ? WHERE id = ?", [cleanName, conversationId]);
@@ -631,6 +645,74 @@ export async function getConversationMediaCount(conversationId) {
     [conversationId]
   );
   return rows[0]?.count || 0;
+}
+
+// Returns 'admin' | 'officer' | 'member' | null (null = not in the group at all).
+export async function getConversationRole(conversationId, userId) {
+  const [rows] = await query(
+    "SELECT is_admin, is_officer FROM conversation_members WHERE conversation_id = ? AND user_id = ?",
+    [conversationId, userId]
+  );
+  if (!rows[0]) return null;
+  if (rows[0].is_admin) return "admin";
+  if (rows[0].is_officer) return "officer";
+  return "member";
+}
+
+// Officer-or-above rank check, used to gate "manage members" actions (add/remove regular
+// members, rename, change photo). Full admin-only actions check for 'admin' directly.
+export async function isOfficerOrAdmin(conversationId, userId) {
+  const role = await getConversationRole(conversationId, userId);
+  return role === "admin" || role === "officer";
+}
+
+// Adds a new member to a group. Requires the acting user to be an officer or admin.
+// Returns the added user's id, or null if the acting user lacks permission, the group
+// doesn't exist / isn't a group, or the target is already a member.
+export async function addConversationMember(conversationId, actingUserId, targetUserId) {
+  const [convRows] = await query("SELECT type FROM conversations WHERE id = ?", [conversationId]);
+  if (!convRows[0] || convRows[0].type !== "group") return null;
+  if (!(await isOfficerOrAdmin(conversationId, actingUserId))) return null;
+  if (await isConversationMember(conversationId, targetUserId)) return null;
+  await query(
+    "INSERT INTO conversation_members (conversation_id, user_id, is_admin, is_officer) VALUES (?, ?, 0, 0)",
+    [conversationId, targetUserId]
+  );
+  return targetUserId;
+}
+
+// Removes a member from a group. Officers/admins can remove regular members; only an
+// admin can remove an officer or another admin. Nobody can remove themselves this way
+// (use group:leave instead). Returns true on success, false if not permitted / not found.
+export async function removeConversationMember(conversationId, actingUserId, targetUserId) {
+  if (actingUserId === targetUserId) return false;
+  const actingRole = await getConversationRole(conversationId, actingUserId);
+  const targetRole = await getConversationRole(conversationId, targetUserId);
+  if (!targetRole) return false;
+  if (actingRole !== "admin" && actingRole !== "officer") return false;
+  if (actingRole === "officer" && targetRole !== "member") return false; // officers can't remove officers/admins
+  await query("DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?", [
+    conversationId,
+    targetUserId,
+  ]);
+  return true;
+}
+
+// Promotes/demotes a member's role. Admin-only: an officer cannot grant or revoke
+// officer/admin status (per the "officer can't make anyone officer or remove an admin"
+// rule), even though officers can otherwise manage members freely.
+export async function setConversationRole(conversationId, actingUserId, targetUserId, role) {
+  if (!["member", "officer", "admin"].includes(role)) return false;
+  const actingRole = await getConversationRole(conversationId, actingUserId);
+  const targetRole = await getConversationRole(conversationId, targetUserId);
+  if (actingRole !== "admin" || !targetRole) return false;
+  const isAdmin = role === "admin" ? 1 : 0;
+  const isOfficer = role === "officer" ? 1 : 0;
+  await query(
+    "UPDATE conversation_members SET is_admin = ?, is_officer = ? WHERE conversation_id = ? AND user_id = ?",
+    [isAdmin, isOfficer, conversationId, targetUserId]
+  );
+  return true;
 }
 
 export async function isConversationMember(conversationId, userId) {

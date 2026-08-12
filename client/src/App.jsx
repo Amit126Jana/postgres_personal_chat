@@ -704,6 +704,16 @@ function App() {
       // else: transient network issue — leave the token intact and let socket.io retry.
     });
 
+    // Live online/offline status for anyone sharing a conversation with me.
+    socket.on("presence:update", ({ userId: uid, online }) => {
+      setConversations((prev) =>
+        prev.map((c) => ({
+          ...c,
+          members: (c.members || []).map((m) => (m.id === uid ? { ...m, online } : m)),
+        })),
+      );
+    });
+
     // Initial conversation list on login.
     socket.on("conversations", (list) => {
       setConversations(list);
@@ -1650,6 +1660,19 @@ function App() {
 
   function renameGroup(conversationId, name) {
     socket.emit("group:rename", { conversationId, name });
+  }
+
+  function addGroupMember(conversationId, userId) {
+    socket.emit("group:addMember", { conversationId, userId });
+  }
+
+  function removeGroupMember(conversationId, userId) {
+    if (!window.confirm("Remove this member from the group?")) return;
+    socket.emit("group:removeMember", { conversationId, userId });
+  }
+
+  function setGroupMemberRole(conversationId, userId, role) {
+    socket.emit("group:setRole", { conversationId, userId, role });
   }
 
   async function handleBlockUser(otherUserId) {
@@ -3116,6 +3139,11 @@ function App() {
           onOpenMember={() => {}}
           onDeleteGroup={() => requestDeleteGroup(activeConv.id)}
           onLeaveGroup={() => requestLeaveGroup(activeConv.id)}
+          serverUrl={SERVER_URL}
+          token={tokenRef.current}
+          onAddMember={(uid) => addGroupMember(activeConv.id, uid)}
+          onRemoveMember={(uid) => removeGroupMember(activeConv.id, uid)}
+          onSetRole={(uid, role) => setGroupMemberRole(activeConv.id, uid, role)}
         />
       )}
 

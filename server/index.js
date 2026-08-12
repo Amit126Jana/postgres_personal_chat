@@ -56,6 +56,10 @@ import {
   leaveGroupConversation,
   getConversationMediaCount,
   renameGroupConversation,
+  addConversationMember,
+  removeConversationMember,
+  setConversationRole,
+  getConversationRole,
 } from "./db.js";
 import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_PLAYER_GAMES } from "./games.js";
 import { recordGameResult, getGameHistory } from "./db.js";
@@ -672,6 +676,32 @@ async function joinAllConversations(socket, userId) {
   return conversations;
 }
 
+// Stamps each member of each conversation with their live online status, based on
+// whether they currently have any open socket connection (userSockets).
+function withOnlineMembers(conversations) {
+  return conversations.map((c) => ({
+    ...c,
+    members: (c.members || []).map((m) => ({
+      ...m,
+      online: (userSockets.get(m.id)?.size || 0) > 0,
+    })),
+  }));
+}
+
+// Tells everyone who shares a conversation with `userId` that their online status just
+// changed, so group member lists and DM contact rows update live instead of staying
+// stuck at whatever they showed on initial load.
+async function broadcastPresence(userId, online) {
+  try {
+    const conversations = await getUserConversations(userId);
+    for (const c of conversations) {
+      io.to(convRoom(c.id)).emit("presence:update", { userId, online });
+    }
+  } catch (err) {
+    console.error("broadcastPresence failed", err.message);
+  }
+}
+
 io.on("connection", async (socket) => {
   // By the time we get here, the io.use() middleware above has already verified the
   // socket's JWT and loaded the corresponding user — no separate "login" event needed.
@@ -710,7 +740,13 @@ io.on("connection", async (socket) => {
       hiddenMessageIds,
       clearedChats,
     });
-    socket.emit("conversations", conversations);
+    socket.emit("conversations", withOnlineMembers(conversations));
+
+    // If this is the first live connection for this user (not just another tab), let
+    // everyone sharing a conversation with them know they just came online.
+    if (userSockets.get(user.id)?.size === 1) {
+      broadcastPresence(user.id, true);
+    }
 
     // Catch up delivery receipts for anything sent while this user was offline.
     const deliveredGroups = await markMessagesDeliveredForUser(user.id);
@@ -1034,7 +1070,7 @@ io.on("connection", async (socket) => {
       if (!result.deleted) {
         const remainingIds = memberIdsBefore.filter((id) => id !== me.userId);
         for (const memberId of remainingIds) {
-          const [updated] = (await getUserConversations(memberId)).filter((c) => c.id === conversationId);
+          const [updated] = withOnlineMembers(await getUserConversations(memberId)).filter((c) => c.id === conversationId);
           for (const sid of userSockets.get(memberId) || []) {
             io.to(sid).emit("conversation:updated", updated);
           }
@@ -1042,6 +1078,86 @@ io.on("connection", async (socket) => {
       }
     } catch (err) {
       console.error("group:leave failed", err.message);
+    }
+  });
+
+  // --- Add a member to a group. Requires the acting user to be an officer or admin. ---
+  socket.on("group:addMember", async ({ conversationId, userId }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me || !conversationId || !userId) return;
+    try {
+      const added = await addConversationMember(conversationId, me.userId, userId);
+      if (!added) {
+        socket.emit("message:error", { message: "Only a group admin or officer can add members" });
+        return;
+      }
+      const memberIds = await getConversationMemberIds(conversationId);
+      for (const memberId of memberIds) {
+        const [updated] = withOnlineMembers(await getUserConversations(memberId)).filter(
+          (c) => c.id === conversationId,
+        );
+        for (const sid of userSockets.get(memberId) || []) {
+          io.sockets.sockets.get(sid)?.join(convRoom(conversationId));
+          io.to(sid).emit(memberId === userId ? "conversation:new" : "conversation:updated", updated);
+        }
+      }
+    } catch (err) {
+      console.error("group:addMember failed", err.message);
+    }
+  });
+
+  // --- Remove a member from a group. Officers/admins can remove regular members;
+  // only an admin can remove an officer or another admin. ---
+  socket.on("group:removeMember", async ({ conversationId, userId }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me || !conversationId || !userId) return;
+    try {
+      const ok = await removeConversationMember(conversationId, me.userId, userId);
+      if (!ok) {
+        socket.emit("message:error", { message: "You don't have permission to remove that member" });
+        return;
+      }
+      for (const sid of userSockets.get(userId) || []) {
+        io.sockets.sockets.get(sid)?.leave(convRoom(conversationId));
+        io.to(sid).emit("conversation:deleted", { conversationId });
+      }
+      const memberIds = await getConversationMemberIds(conversationId);
+      for (const memberId of memberIds) {
+        const [updated] = withOnlineMembers(await getUserConversations(memberId)).filter(
+          (c) => c.id === conversationId,
+        );
+        for (const sid of userSockets.get(memberId) || []) {
+          io.to(sid).emit("conversation:updated", updated);
+        }
+      }
+    } catch (err) {
+      console.error("group:removeMember failed", err.message);
+    }
+  });
+
+  // --- Promote/demote a member's role (member / officer / admin). Admin-only: an
+  // officer cannot grant or revoke officer/admin status, even though officers can
+  // otherwise manage the group. ---
+  socket.on("group:setRole", async ({ conversationId, userId, role }) => {
+    const me = onlineUsers.get(socket.id);
+    if (!me || !conversationId || !userId || !role) return;
+    try {
+      const ok = await setConversationRole(conversationId, me.userId, userId, role);
+      if (!ok) {
+        socket.emit("message:error", { message: "Only a group admin can change member roles" });
+        return;
+      }
+      const memberIds = await getConversationMemberIds(conversationId);
+      for (const memberId of memberIds) {
+        const [updated] = withOnlineMembers(await getUserConversations(memberId)).filter(
+          (c) => c.id === conversationId,
+        );
+        for (const sid of userSockets.get(memberId) || []) {
+          io.to(sid).emit("conversation:updated", updated);
+        }
+      }
+    } catch (err) {
+      console.error("group:setRole failed", err.message);
     }
   });
 
@@ -1469,7 +1585,11 @@ io.on("connection", async (socket) => {
     onlineUsers.delete(socket.id);
     if (user) {
       userSockets.get(user.userId)?.delete(socket.id);
-      if (userSockets.get(user.userId)?.size === 0) userSockets.delete(user.userId);
+      const stillHasSockets = (userSockets.get(user.userId)?.size || 0) > 0;
+      if (!stillHasSockets) {
+        userSockets.delete(user.userId);
+        broadcastPresence(user.userId, false);
+      }
     }
     for (const conversationId of [...activeGroupCalls.keys()]) {
       leaveGroupCall(socket, conversationId);

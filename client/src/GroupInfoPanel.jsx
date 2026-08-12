@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
  * Shown when the person taps the group header / Info in the ⋮ menu.
  */
 export default function GroupInfoPanel({
-  conv, // conversation object: { id, name, avatarUrl, members, myIsAdmin, createdAt }
+  conv, // conversation object: { id, name, avatarUrl, members, myIsAdmin, myIsOfficer, createdAt }
   myUserId,
   mediaCount,
   onClose,
@@ -18,10 +18,18 @@ export default function GroupInfoPanel({
   onDeleteGroup,
   onLeaveGroup,
   uploading,
+  serverUrl,
+  token,
+  onAddMember,
+  onRemoveMember,
+  onSetRole,
 }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(conv?.name || "");
   const [muted, setMuted] = useState(false);
+  const [openMemberMenuFor, setOpenMemberMenuFor] = useState(null);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
 
   useEffect(() => {
     setNameDraft(conv?.name || "");
@@ -33,9 +41,33 @@ export default function GroupInfoPanel({
     }
   }, [conv?.id, conv?.name]);
 
+  useEffect(() => {
+    if (!showAddMember || !serverUrl) return;
+    let cancelled = false;
+    fetch(`${serverUrl}/api/users`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => r.json())
+      .then((list) => {
+        if (!cancelled && Array.isArray(list)) setAllUsers(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [showAddMember, serverUrl, token]);
+
   if (!conv) return null;
 
+  // Can this person manage members (add/remove regular members, rename, change photo)?
+  // Officers can do everything an admin can here, except grant/revoke admin or officer
+  // status, and except removing an admin or another officer.
+  const myRole = conv.myIsAdmin ? "admin" : conv.myIsOfficer ? "officer" : "member";
+  const canManageMembers = myRole === "admin" || myRole === "officer";
+
   const onlineCount = conv.members?.filter((m) => m.online).length || 0;
+  const memberIds = new Set((conv.members || []).map((m) => m.id));
+  const addableUsers = allUsers.filter((u) => !memberIds.has(u.id));
 
   function saveNameEdit() {
     const trimmed = nameDraft.trim();
@@ -53,6 +85,39 @@ export default function GroupInfoPanel({
     const next = muted ? mutedIds.filter((id) => id !== conv.id) : [...mutedIds, conv.id];
     localStorage.setItem("mf_muted_convs", JSON.stringify(next));
     setMuted(!muted);
+  }
+
+  function roleLabel(m) {
+    if (m.isAdmin) return "Admin";
+    if (m.isOfficer) return "Officer";
+    return null;
+  }
+
+  // What can *I* do to member `m`, given my own role?
+  function memberActions(m) {
+    if (m.id === myUserId) return [];
+    const actions = [];
+    const targetRole = m.isAdmin ? "admin" : m.isOfficer ? "officer" : "member";
+
+    const canRemove =
+      myRole === "admin" ? true : myRole === "officer" ? targetRole === "member" : false;
+    if (canRemove) actions.push({ key: "remove", label: "Remove from group" });
+
+    // Only admins can grant/revoke admin or officer status.
+    if (myRole === "admin") {
+      if (targetRole !== "officer") actions.push({ key: "makeOfficer", label: "Make officer" });
+      if (targetRole !== "admin") actions.push({ key: "makeAdmin", label: "Make admin" });
+      if (targetRole !== "member") actions.push({ key: "makeMember", label: "Remove role (make member)" });
+    }
+    return actions;
+  }
+
+  function runMemberAction(m, key) {
+    setOpenMemberMenuFor(null);
+    if (key === "remove") onRemoveMember(m.id);
+    else if (key === "makeOfficer") onSetRole(m.id, "officer");
+    else if (key === "makeAdmin") onSetRole(m.id, "admin");
+    else if (key === "makeMember") onSetRole(m.id, "member");
   }
 
   return (
@@ -77,7 +142,7 @@ export default function GroupInfoPanel({
             {conv.avatarUrl ? <img src={conv.avatarUrl} alt="" /> : <span>👥</span>}
             {uploading && <span className="room-avatar-spinner" />}
           </div>
-          {conv.myIsAdmin && (
+          {canManageMembers && (
             <button type="button" className="info-panel-avatar-edit" title="Change group photo" onClick={onPickAvatar}>
               <svg className="icon" width="13" height="13"><use href="#camera-icon" /></svg>
             </button>
@@ -102,7 +167,7 @@ export default function GroupInfoPanel({
           ) : (
             <div className="info-panel-name">
               {conv.name}
-              {conv.myIsAdmin && (
+              {canManageMembers && (
                 <button type="button" className="info-panel-edit-btn" onClick={() => setEditingName(true)} title="Rename group">
                   <svg className="icon" width="14" height="14"><use href="#edit-pencil-icon" /></svg>
                 </button>
@@ -157,22 +222,97 @@ export default function GroupInfoPanel({
             <span className="info-panel-count">{onlineCount} online</span>
           </div>
           <div className="info-panel-members">
-            {(conv.members || []).map((m) => (
-              <div key={m.id} className="info-panel-member-row" onClick={() => m.id !== myUserId && onOpenMember(m)}>
-                <span className="avatar info-panel-member-avatar">
-                  {m.avatarUrl ? <img src={m.avatarUrl} alt="" /> : (m.username || "?").slice(0, 2).toUpperCase()}
-                </span>
-                <div className="info-panel-member-text">
-                  <div className="info-panel-member-name">
-                    {m.username}
-                    {m.id === myUserId && <span className="info-panel-you-tag"> (You)</span>}
+            {(conv.members || []).map((m) => {
+              const actions = memberActions(m);
+              return (
+                <div key={m.id} className="info-panel-member-row" style={{ position: "relative" }}>
+                  <span
+                    className="avatar info-panel-member-avatar"
+                    onClick={() => m.id !== myUserId && onOpenMember(m)}
+                  >
+                    {m.avatarUrl ? <img src={m.avatarUrl} alt="" /> : (m.username || "?").slice(0, 2).toUpperCase()}
+                  </span>
+                  <div
+                    className="info-panel-member-text"
+                    onClick={() => m.id !== myUserId && onOpenMember(m)}
+                  >
+                    <div className="info-panel-member-name">
+                      {m.username}
+                      {m.id === myUserId && <span className="info-panel-you-tag"> (You)</span>}
+                    </div>
+                    {m.online && <div className="info-panel-row-sub status-online">Online</div>}
                   </div>
-                  {m.online && <div className="info-panel-row-sub status-online">Online</div>}
+                  {roleLabel(m) && (
+                    <span className={"info-panel-admin-tag" + (m.isOfficer ? " info-panel-officer-tag" : "")}>
+                      {roleLabel(m)}
+                    </span>
+                  )}
+                  {actions.length > 0 && (
+                    <button
+                      type="button"
+                      className="info-panel-member-menu-btn"
+                      title="Member options"
+                      onClick={() => setOpenMemberMenuFor(openMemberMenuFor === m.id ? null : m.id)}
+                    >
+                      ⋮
+                    </button>
+                  )}
+                  {openMemberMenuFor === m.id && (
+                    <div className="info-panel-member-menu" onClick={(e) => e.stopPropagation()}>
+                      {actions.map((a) => (
+                        <button
+                          key={a.key}
+                          type="button"
+                          className={a.key === "remove" ? "danger" : ""}
+                          onClick={() => runMemberAction(m, a.key)}
+                        >
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {m.isAdmin && <span className="info-panel-admin-tag">Admin</span>}
-              </div>
-            ))}
+              );
+            })}
           </div>
+
+          {canManageMembers && (
+            <div className="info-panel-add-member">
+              {!showAddMember ? (
+                <button type="button" className="info-panel-add-member-btn" onClick={() => setShowAddMember(true)}>
+                  + Add Member
+                </button>
+              ) : (
+                <div className="info-panel-add-member-picker">
+                  <div className="info-panel-add-member-picker-header">
+                    <span>Add someone</span>
+                    <button type="button" onClick={() => setShowAddMember(false)}>✕</button>
+                  </div>
+                  {addableUsers.length === 0 ? (
+                    <div className="info-panel-row-sub">No one else to add.</div>
+                  ) : (
+                    addableUsers.map((u) => (
+                      <div
+                        key={u.id}
+                        className="info-panel-member-row info-panel-add-member-row"
+                        onClick={() => {
+                          onAddMember(u.id);
+                          setShowAddMember(false);
+                        }}
+                      >
+                        <span className="avatar info-panel-member-avatar">
+                          {u.avatarUrl ? <img src={u.avatarUrl} alt="" /> : (u.username || "?").slice(0, 2).toUpperCase()}
+                        </span>
+                        <div className="info-panel-member-text">
+                          <div className="info-panel-member-name">{u.username}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="info-panel-footer-actions">
