@@ -726,41 +726,84 @@ export default function GameOverlay({
     );
   }
 
+  const me = members.find((m) => m.id === myUserId) || null;
+  const opponentOnline = !!opponent?.online;
+
+  function statusLine() {
+    if (session.status === "finished") return "Game over";
+    const state = session.state;
+    if (!state) return "";
+    if (typeof state.turn === "number") {
+      return state.turn === myIndex ? "Your turn" : `${opponent?.username || "Opponent"}'s turn`;
+    }
+    return "In progress";
+  }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "460px" }}>
-        <button type="button" className="modal-close" onClick={onClose}>
+      <div className="game-board-card" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
           ✕
         </button>
-        <h3 style={{ margin: "0 0 14px" }}>🎮 {gameLabel(session.type)}</h3>
+
+        <div className="game-board-icon-badge">
+          <span aria-hidden="true">🎮</span>
+        </div>
+        <h3 className="game-board-title">{gameLabel(session.type)}</h3>
 
         {session.status === "declined" && <p style={{ textAlign: "center" }}>Invite was declined.</p>}
         {session.status === "cancelled" && <p style={{ textAlign: "center" }}>Invite was cancelled.</p>}
 
-        {(session.status === "active" || session.status === "finished") && Board && session.state && (
-          <Board state={session.state} myIndex={myIndex} onMove={onMove} />
+        {(session.status === "active" || session.status === "finished") && (
+          <>
+            <div className="game-board-status-line">{statusLine()}</div>
+
+            <div className="game-board-players-row">
+              <div className="game-board-player">
+                <span className="avatar game-board-player-avatar">
+                  {me?.avatarUrl ? <img src={me.avatarUrl} alt="" /> : initials(me?.username || "You")}
+                </span>
+                <div className="game-board-player-name">{me?.username || "You"}</div>
+                <div className="game-board-player-sub status-online">● You</div>
+              </div>
+              <div className="game-board-vs">VS</div>
+              <div className="game-board-player">
+                <span className="avatar game-board-player-avatar">
+                  {opponent?.avatarUrl ? <img src={opponent.avatarUrl} alt="" /> : initials(opponent?.username)}
+                </span>
+                <div className="game-board-player-name">{opponent?.username || "Opponent"}</div>
+                <div className={"game-board-player-sub" + (opponentOnline ? " status-online" : "")}>
+                  {opponentOnline ? "● Online" : "○ Waiting…"}
+                </div>
+              </div>
+            </div>
+          </>
         )}
 
-        {session.status === "active" && (
-          <div style={{ textAlign: "center", marginTop: "16px" }}>
-            <button
-              type="button"
-              onClick={handleExit}
-              style={{ background: "var(--danger, #d9534f)", color: "#fff", border: "none" }}
-            >
-              🚪 Exit game
-            </button>
+        {(session.status === "active" || session.status === "finished") && Board && session.state && (
+          <div className="game-board-surface">
+            <Board state={session.state} myIndex={myIndex} onMove={onMove} />
           </div>
         )}
 
+        {session.status === "active" && (
+          <button type="button" className="game-board-exit-btn" onClick={handleExit}>
+            <span aria-hidden="true">🚪</span> Exit Game
+          </button>
+        )}
+
         {session.status === "finished" && (
-          <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "16px", flexWrap: "wrap" }}>
-            <button type="button" onClick={() => onRematch(session)}>
-              🔁 Rematch
+          <div className="game-board-finished-actions">
+            <button type="button" className="game-board-rematch-btn" onClick={() => onRematch(session)}>
+              <span aria-hidden="true">🔁</span> Rematch
             </button>
             {onViewHistory && (
-              <button type="button" onClick={() => onViewHistory(session.conversationId)}>
-                📜 Past results
+              <button
+                type="button"
+                className="game-board-history-btn"
+                onClick={() => onViewHistory(session.conversationId)}
+              >
+                <span aria-hidden="true">📜</span> Past results
               </button>
             )}
           </div>

@@ -4489,6 +4489,150 @@ label.modal-user-row {
   font-weight: 800;
 }
 
+/* --- Active/finished game board shell (all games) --- */
+.game-board-card {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  max-height: 88vh;
+  overflow-y: auto;
+  border-radius: 20px;
+  padding: 30px 26px 26px;
+  text-align: center;
+  background: var(--surface-1, #14151d);
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+.game-board-icon-badge {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  background: linear-gradient(135deg, #3480ff, #63a6ff);
+  box-shadow: 0 8px 20px rgba(52, 128, 255, 0.4);
+}
+.game-board-title {
+  margin: 0 0 6px;
+  font-size: 19px;
+}
+.game-board-status-line {
+  font-size: 13px;
+  font-weight: 600;
+  color: #63a6ff;
+  margin-bottom: 16px;
+}
+.game-board-players-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 12px;
+  margin-bottom: 18px;
+}
+.game-board-player {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.game-board-player-avatar {
+  width: 44px;
+  height: 44px;
+}
+.game-board-player-name {
+  font-size: 13px;
+  font-weight: 700;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.game-board-player-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.game-board-vs {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(52, 128, 255, 0.18);
+  color: #63a6ff;
+  border: 1px solid rgba(52, 128, 255, 0.4);
+}
+.game-board-surface {
+  margin-bottom: 8px;
+}
+.game-board-exit-btn {
+  width: 100%;
+  margin-top: 18px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.08);
+  color: #ff8a8a;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.game-board-exit-btn:hover {
+  background: rgba(255, 107, 107, 0.14);
+}
+.game-board-finished-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+.game-board-rematch-btn,
+.game-board-history-btn {
+  flex: 1;
+  min-width: 140px;
+  padding: 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+}
+.game-board-rematch-btn {
+  background: linear-gradient(135deg, #3480ff, #63a6ff);
+  border-color: transparent;
+  color: #05122b;
+}
+.game-board-rematch-btn:hover {
+  filter: brightness(1.06);
+}
+.game-board-history-btn {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+.game-board-history-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* --- Multi-select, delete-for-me/everyone, clear chat, wallpapers --- */
 .msg-selectable {
   cursor: pointer;
