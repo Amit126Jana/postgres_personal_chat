@@ -30,6 +30,7 @@ const PAGE_SIZES = [10, 25, 50];
 // omitted and the panel just renders as a normal in-app section.
 export default function AdminPage({ serverUrl, token, adminEmail, onLogout, mediaSrc, standalone = false }) {
   const [users, setUsers] = useState(null);
+  const [groups, setGroups] = useState(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // all | online | offline | suspended
@@ -91,6 +92,11 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
       }
       if (!res.ok) throw new Error("Failed to load users");
       setUsers(await res.json());
+
+      const groupsRes = await fetch(`${serverUrl}/api/admin/groups`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (groupsRes.ok) setGroups(await groupsRes.json());
     } catch (err) {
       setError(err.message || "Failed to load users");
     } finally {
@@ -195,6 +201,14 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
             <div className="adminx-stat-label">Suspended</div>
             <div className="adminx-stat-num">{suspendedCount}</div>
             <div className="adminx-stat-sub">Suspended accounts</div>
+          </div>
+          <div className="adminx-stat-card adminx-stat-purple">
+            <span className="adminx-stat-icon">
+              <svg className="icon" width="20" height="20"><use href="#groups-icon" /></svg>
+            </span>
+            <div className="adminx-stat-label">Total Groups</div>
+            <div className="adminx-stat-num">{groups ? groups.length : "—"}</div>
+            <div className="adminx-stat-sub">All group chats</div>
           </div>
         </div>
       )}
@@ -372,6 +386,60 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
           </div>
         </div>
       )}
+
+      <div className="adminx-header" style={{ marginTop: 32 }}>
+        <div>
+          <h2 className="adminx-title">
+            <span className="adminx-title-dim">Admin</span> / Groups
+          </h2>
+          <div className="adminx-subtitle">All group chats currently on the platform</div>
+        </div>
+      </div>
+
+      {groups && (
+        <div className="admin-summary">
+          {groups.length} group{groups.length === 1 ? "" : "s"} total
+        </div>
+      )}
+
+      <div className="list-page-body adminx-body">
+        {!error && groups === null && <div className="list-page-empty">Loading groups…</div>}
+        {!error && groups && groups.length === 0 && (
+          <div className="list-page-empty">No groups yet.</div>
+        )}
+
+        {!error && groups && groups.length > 0 && (
+          <div className="adminx-table">
+            <div className="adminx-row adminx-row-head">
+              <span>Group</span>
+              <span>Created By</span>
+              <span>Members</span>
+              <span>Created</span>
+            </div>
+
+            {groups.map((g) => (
+              <div key={g.id} className="adminx-row">
+                <div className="adminx-user-cell">
+                  <span className="avatar admin-avatar adminx-avatar">
+                    {g.avatarUrl ? <img src={resolveAvatar(g.avatarUrl)} alt="" /> : initials(g.name)}
+                  </span>
+                  <div className="admin-row-main">
+                    <div className="admin-row-name">{g.name || "Unnamed group"}</div>
+                  </div>
+                </div>
+                <div className="adminx-status-cell">{g.createdBy || "—"}</div>
+                <div className="adminx-sessions-cell">
+                  <svg className="icon" width="15" height="15"><use href="#groups-icon" /></svg>
+                  {g.memberCount}
+                </div>
+                <div className="adminx-lastactive-cell">
+                  <div>{timeAgo(g.createdAt)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

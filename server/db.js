@@ -388,6 +388,21 @@ export async function listUsersForAdmin() {
   return rows.map((u) => ({ ...u, isAdmin: !!u.isAdmin }));
 }
 
+// Full group directory for the admin panel — every group conversation with its member
+// count and creator. No message content.
+export async function listGroupsForAdmin() {
+  const [rows] = await query(
+    `SELECT c.id, c.name, c.avatar_url AS "avatarUrl", c.created_at AS "createdAt",
+            creator.username AS "createdBy",
+            (SELECT COUNT(*) FROM conversation_members cm WHERE cm.conversation_id = c.id) AS "memberCount"
+     FROM conversations c
+     LEFT JOIN users creator ON creator.id = c.created_by
+     WHERE c.type = 'group'
+     ORDER BY c.created_at DESC`
+  );
+  return rows.map((g) => ({ ...g, memberCount: Number(g.memberCount) }));
+}
+
 // Grants or revokes the global in-app admin flag for the account with this phone number.
 export async function setUserAdminByPhone(phoneNumber, isAdmin) {
   await query("UPDATE users SET is_admin = ? WHERE phone_number = ?", [isAdmin ? 1 : 0, phoneNumber]);

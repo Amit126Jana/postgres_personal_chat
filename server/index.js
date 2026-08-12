@@ -44,6 +44,7 @@ import {
   clearChatForUser,
   getClearedChats,
   listUsersForAdmin,
+  listGroupsForAdmin,
   setUserAdminByPhone,
   setUserStatus,
   deleteUserAccount,
@@ -382,6 +383,14 @@ app.get("/api/admin/users", requireAuth, requireAdmin, async (_req, res) => {
       };
     });
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/admin/groups", requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    res.json(await listGroupsForAdmin());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
