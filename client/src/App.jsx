@@ -759,7 +759,7 @@ function App() {
     socket.on("conversation:history", ({ conversationId, messages }) => {
       setMessagesByConv((prev) => ({
         ...prev,
-        [conversationId]: messages.map((m) => ({ ...m, reactions: {} })),
+        [conversationId]: messages.map((m) => ({ ...m, reactions: m.reactions || {} })),
       }));
       // The initial batch is capped at 50 server-side (see getMessages default limit).
       // A shorter batch means we've already got the whole history for this conversation.
@@ -1173,7 +1173,7 @@ function App() {
       setMessagesByConv((prev) => ({
         ...prev,
         [conversationId]: [
-          ...older.map((m) => ({ ...m, reactions: {} })),
+          ...older.map((m) => ({ ...m, reactions: m.reactions || {} })),
           ...(prev[conversationId] || []),
         ],
       }));

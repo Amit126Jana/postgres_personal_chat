@@ -128,6 +128,19 @@ export async function initDb() {
   // Add delivered_at for databases created before delivery-tracking was added.
   await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP NULL`);
 
+  // Emoji/sticker/voice/video reactions on messages. A user can react to the same
+  // message with several different emoji, but only once per emoji (re-reacting with
+  // the same emoji removes it — handled in toggleMessageReaction below).
+  await query(`
+    CREATE TABLE IF NOT EXISTS message_reactions (
+      message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      emoji VARCHAR(64) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (message_id, user_id, emoji)
+    )
+  `);
+
   // Persisted record of every finished/forfeited game, so players can look back at past results.
   await query(`
     CREATE TABLE IF NOT EXISTS game_history (
@@ -581,6 +594,7 @@ export async function getUserConversations(userId) {
     conv.lastMessage = lastMsgRows[0]
       ? { ...lastMsgRows[0], mine: lastMsgRows[0].senderId === userId }
       : null;
+    conv.lastReaction = await getLatestReactionForConversation(conv.id);
 
     liveRows.push(conv);
   }
@@ -797,6 +811,69 @@ export async function getMessageOwner(messageId) {
   return rows[0]?.userId ?? null;
 }
 
+// Toggles a user's reaction on a message (add if not present, remove if it is), and
+// returns the full up-to-date reaction summary for that message: { emoji: [usernames] }.
+export async function toggleMessageReaction(messageId, userId, emoji) {
+  const [existing] = await query(
+    "SELECT 1 FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?",
+    [messageId, userId, emoji]
+  );
+  let added;
+  if (existing.length > 0) {
+    await query("DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?", [
+      messageId,
+      userId,
+      emoji,
+    ]);
+    added = false;
+  } else {
+    await query("INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)", [
+      messageId,
+      userId,
+      emoji,
+    ]);
+    added = true;
+  }
+  const reactions = await getReactionsForMessageIds([messageId]);
+  return { added, reactions: reactions[messageId] || {} };
+}
+
+// Batch-fetches reaction summaries for a set of message ids: { messageId: { emoji: [usernames] } }.
+export async function getReactionsForMessageIds(messageIds) {
+  if (!messageIds || messageIds.length === 0) return {};
+  const [rows] = await query(
+    `SELECT r.message_id AS "messageId", r.emoji, u.username
+     FROM message_reactions r JOIN users u ON u.id = r.user_id
+     WHERE r.message_id = ANY(?)
+     ORDER BY r.created_at ASC`,
+    [messageIds]
+  );
+  const byMessage = {};
+  for (const row of rows) {
+    if (!byMessage[row.messageId]) byMessage[row.messageId] = {};
+    if (!byMessage[row.messageId][row.emoji]) byMessage[row.messageId][row.emoji] = [];
+    byMessage[row.messageId][row.emoji].push(row.username);
+  }
+  return byMessage;
+}
+
+// The single most recent reaction added anywhere in a conversation — used to seed the
+// roster preview ("X reacted 😍 to a message") on initial load, same shape the live
+// reaction:activity socket event uses.
+export async function getLatestReactionForConversation(conversationId) {
+  const [rows] = await query(
+    `SELECT r.emoji, r.created_at AS "createdAt", u.username AS "fromUsername"
+     FROM message_reactions r
+     JOIN messages m ON m.id = r.message_id
+     JOIN users u ON u.id = r.user_id
+     WHERE m.conversation_id = ?
+     ORDER BY r.created_at DESC
+     LIMIT 1`,
+    [conversationId]
+  );
+  return rows[0] || null;
+}
+
 export async function addMessage({ conversationId, userId, type, text, mediaUrl, mediaName }) {
   const [inserted] = await query(
     `INSERT INTO messages (conversation_id, user_id, type, text, media_url, media_name)
@@ -832,7 +909,9 @@ export async function getMessages(conversationId, limit = 50, beforeMessageId = 
     `${MESSAGE_SELECT} WHERE m.conversation_id = ?${cursorClause} ORDER BY m.created_at DESC LIMIT ?`,
     params
   );
-  return rows.reverse();
+  const ordered = rows.reverse();
+  const reactionsByMessage = await getReactionsForMessageIds(ordered.map((m) => m.id));
+  return ordered.map((m) => ({ ...m, reactions: reactionsByMessage[m.id] || {} }));
 }
 
 // Marks every not-yet-seen message in a conversation, sent by someone other than

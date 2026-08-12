@@ -23,6 +23,7 @@ import {
   addMessage,
   getMessages,
   getMessageOwner,
+  toggleMessageReaction,
   updateUserProfile,
   updateMessageText,
   createPoll,
@@ -579,7 +580,6 @@ async function notifyOfflineMembers(conversationId, sender, message) {
   }
 }
 
-const messageReactions = new Map(); // messageId -> Map(emoji -> Set(userId))
 const activeGroupCalls = new Map(); // conversationId -> Map(socketId -> { userId, username })
 
 // In-chat mini-games — one active game session per (direct) conversation at a time.
@@ -1336,35 +1336,20 @@ io.on("connection", async (socket) => {
     if (session) await broadcastGameSession(io, session);
   });
 
-  // --- Emoji reactions on messages (scoped to a conversation room) ---
+  // --- Emoji reactions on messages (scoped to a conversation room), persisted to DB ---
   socket.on("reaction", async ({ conversationId, messageId, emoji }) => {
     const me = onlineUsers.get(socket.id);
     if (!me || !conversationId || !messageId || !emoji) return;
 
-    if (!messageReactions.has(messageId)) {
-      messageReactions.set(messageId, new Map()); // emoji -> Set(userId)
-    }
-    const byEmoji = messageReactions.get(messageId);
-    if (!byEmoji.has(emoji)) byEmoji.set(emoji, new Set());
-    const reactors = byEmoji.get(emoji);
-
-    let added = false;
-    if (reactors.has(me.userId)) {
-      reactors.delete(me.userId);
-      if (reactors.size === 0) byEmoji.delete(emoji);
-    } else {
-      reactors.add(me.userId);
-      added = true;
+    let added, reactions;
+    try {
+      ({ added, reactions } = await toggleMessageReaction(messageId, me.userId, emoji));
+    } catch (err) {
+      console.error("toggleMessageReaction failed:", err.message);
+      return;
     }
 
-    const summary = {};
-    for (const [e, ids] of byEmoji.entries()) {
-      summary[e] = [...ids].map((uid) => {
-        for (const u of onlineUsers.values()) if (u.userId === uid) return u.username;
-        return "someone";
-      });
-    }
-    io.to(convRoom(conversationId)).emit("reaction", { messageId, reactions: summary });
+    io.to(convRoom(conversationId)).emit("reaction", { messageId, reactions });
 
     // Broadcast a lightweight activity ping to everyone in the room (including the
     // reactor) so the roster preview ("X reacted 😍 to a message") stays in sync for
