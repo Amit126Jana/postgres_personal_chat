@@ -4214,6 +4214,281 @@ label.modal-user-row {
   margin: 0 0 6px;
   color: var(--text);
 }
+
+/* --- Games menu (picker grid) --- */
+.games-menu-card {
+  max-width: 420px;
+}
+.games-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  font-size: 17px;
+}
+.games-menu-title-icon {
+  font-size: 18px;
+}
+.games-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.games-menu-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 6px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.games-menu-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--signal);
+  background: rgba(255, 255, 255, 0.06);
+}
+.games-menu-tile-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+.games-menu-tile-label {
+  text-align: center;
+}
+.games-menu-history-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.games-menu-history-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* --- Game invite cards (sent / received) & the "Let's Play!" countdown --- */
+.game-invite-card,
+.game-countdown-card {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  border-radius: 20px;
+  padding: 28px 26px 26px;
+  text-align: center;
+  background: var(--surface-1, #14151d);
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+.game-invite-sent {
+  background: linear-gradient(180deg, rgba(124, 92, 255, 0.14), var(--surface-1, #14151d) 45%);
+  border-color: rgba(124, 92, 255, 0.35);
+}
+.game-invite-received {
+  background: linear-gradient(180deg, rgba(46, 191, 120, 0.16), var(--surface-1, #14151d) 45%);
+  border-color: rgba(46, 191, 120, 0.35);
+}
+.game-invite-icon-badge {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  background: linear-gradient(135deg, #7c5cff, #b06cff);
+  box-shadow: 0 8px 20px rgba(124, 92, 255, 0.4);
+}
+.game-invite-icon-badge-green {
+  background: linear-gradient(135deg, #2ebf78, #35d68a);
+  box-shadow: 0 8px 20px rgba(46, 191, 120, 0.4);
+}
+.game-invite-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.game-invite-waiting-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #b6a6ff;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.game-invite-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(182, 166, 255, 0.35);
+  border-top-color: #b6a6ff;
+  animation: game-invite-spin 0.8s linear infinite;
+}
+@keyframes game-invite-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.game-invite-sub {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+.game-invite-board-ghost {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  max-width: 200px;
+  margin: 0 auto 22px;
+}
+.game-invite-board-ghost span {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.game-invite-cancel-btn {
+  width: 100%;
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.08);
+  color: #ff8a8a;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.game-invite-cancel-btn:hover {
+  background: rgba(255, 107, 107, 0.14);
+}
+.game-invite-from-line {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+}
+.game-invite-from-line b {
+  color: #35d68a;
+}
+.game-invite-opponent-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 22px;
+}
+.game-invite-avatar {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+}
+.game-invite-opponent-text {
+  font-weight: 600;
+  font-size: 14px;
+}
+.game-invite-opponent-sub {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.game-invite-actions {
+  display: flex;
+  gap: 10px;
+}
+.game-invite-decline-btn,
+.game-invite-accept-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+}
+.game-invite-decline-btn {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+.game-invite-decline-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.game-invite-accept-btn {
+  background: linear-gradient(135deg, #2ebf78, #35d68a);
+  border-color: transparent;
+  color: #06210f;
+}
+.game-invite-accept-btn:hover {
+  filter: brightness(1.06);
+}
+
+.game-countdown-card {
+  background: linear-gradient(180deg, rgba(52, 128, 255, 0.16), var(--surface-1, #14151d) 45%);
+  border-color: rgba(52, 128, 255, 0.35);
+}
+.game-countdown-trophy {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  background: linear-gradient(135deg, #3480ff, #63a6ff);
+  box-shadow: 0 8px 24px rgba(52, 128, 255, 0.45);
+}
+.game-countdown-title {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+.game-countdown-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.game-countdown-number {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 2px solid #3480ff;
+  color: #63a6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+}
+
 /* --- Multi-select, delete-for-me/everyone, clear chat, wallpapers --- */
 .msg-selectable {
   cursor: pointer;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GAME_LIST } from "./GamesMenu.jsx";
 
 function _useLocalState(initial) {
@@ -576,9 +576,42 @@ const BOARD_COMPONENTS = {
   uno: Uno,
 };
 
+function initials(name) {
+  return (name || "?").slice(0, 2).toUpperCase();
+}
+
+// Brief 3-2-1 "Let's Play!" beat shown once, right when a session flips from
+// pending → active, before the actual board takes over.
+function useJustStarted(status) {
+  const [showing, setShowing] = useState(false);
+  const [count, setCount] = useState(3);
+  const prevStatus = useRef(status);
+
+  useEffect(() => {
+    if (prevStatus.current === "pending" && status === "active") {
+      setShowing(true);
+      setCount(3);
+    }
+    prevStatus.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    if (!showing) return;
+    if (count <= 0) {
+      const t = setTimeout(() => setShowing(false), 250);
+      return () => clearTimeout(t);
+    }
+    const t = setTimeout(() => setCount((c) => c - 1), 700);
+    return () => clearTimeout(t);
+  }, [showing, count]);
+
+  return { showing, count };
+}
+
 export default function GameOverlay({
   session,
   myUserId,
+  members = [],
   onMove,
   onAccept,
   onDecline,
@@ -588,15 +621,109 @@ export default function GameOverlay({
   onClose,
   onViewHistory,
 }) {
+  const { showing: justStarted, count } = useJustStarted(session?.status);
   if (!session) return null;
   const myIndex = session.players.indexOf(myUserId);
   const isInvitee = session.players[1] === myUserId;
   const Board = BOARD_COMPONENTS[session.type];
+  const opponentId = session.players.find((id) => id !== myUserId);
+  const opponent = members.find((m) => m.id === opponentId) || null;
 
   function handleExit() {
     if (window.confirm("Exit this game? It will count as a loss (forfeit) for you.")) {
       onForfeit(session);
     }
+  }
+
+  // --- Sender view: invite just sent, waiting for the other player to accept ---
+  if (session.status === "pending" && !isInvitee) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="game-invite-card game-invite-sent" onClick={(e) => e.stopPropagation()}>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+          <div className="game-invite-icon-badge">🎮</div>
+          <h3 className="game-invite-title">{gameLabel(session.type)}</h3>
+          <div className="game-invite-waiting-line">
+            <span className="game-invite-spinner" />
+            Waiting for opponent…
+          </div>
+          <div className="game-invite-sub">
+            Invite sent to <b>{opponent?.username || "the other player"}</b>
+          </div>
+          <div className="game-invite-board-ghost" aria-hidden="true">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <span key={i} />
+            ))}
+          </div>
+          <button type="button" className="game-invite-cancel-btn" onClick={onCancel}>
+            <span aria-hidden="true">⊗</span> Cancel Invite
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Receiver view: invite just arrived ---
+  if (session.status === "pending" && isInvitee) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="game-invite-card game-invite-received" onClick={(e) => e.stopPropagation()}>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+          <div className="game-invite-icon-badge game-invite-icon-badge-green">🎮</div>
+          <h3 className="game-invite-title">{gameLabel(session.type)}</h3>
+          <div className="game-invite-from-line">
+            <b>{opponent?.username || "Someone"}</b> invited you to play
+          </div>
+          <div className="game-invite-opponent-row">
+            <span className="avatar game-invite-avatar">
+              {opponent?.avatarUrl ? <img src={opponent.avatarUrl} alt="" /> : initials(opponent?.username)}
+            </span>
+            <div className="game-invite-opponent-text">
+              <div>Let's play {gameLabel(session.type)}!</div>
+              <div className="game-invite-opponent-sub">Are you in?</div>
+            </div>
+          </div>
+          <div className="game-invite-actions">
+            <button type="button" className="game-invite-decline-btn" onClick={onDecline}>
+              <span aria-hidden="true">⊗</span> Decline
+            </button>
+            <button type="button" className="game-invite-accept-btn" onClick={onAccept}>
+              <span aria-hidden="true">✓</span> Accept
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Both sides: brief "Let's Play!" countdown once the invite is accepted ---
+  if (justStarted) {
+    return (
+      <div className="modal-backdrop">
+        <div className="game-countdown-card">
+          <div className="game-countdown-trophy">🏆</div>
+          <h3 className="game-countdown-title">Let's Play!</h3>
+          <div className="game-invite-from-line">
+            <b>{opponent?.username || "Your opponent"}</b> has joined the game
+          </div>
+          <div className="game-invite-opponent-row">
+            <span className="avatar game-invite-avatar">
+              {opponent?.avatarUrl ? <img src={opponent.avatarUrl} alt="" /> : initials(opponent?.username)}
+            </span>
+            <div className="game-invite-opponent-text">
+              <div>{opponent?.username || "Opponent"}</div>
+              <div className="game-invite-opponent-sub status-online">● Online</div>
+            </div>
+          </div>
+          <div className="game-countdown-sub">The game will start automatically…</div>
+          <div className="game-countdown-number">{Math.max(count, 0)}</div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -606,23 +733,6 @@ export default function GameOverlay({
           ✕
         </button>
         <h3 style={{ margin: "0 0 14px" }}>🎮 {gameLabel(session.type)}</h3>
-
-        {session.status === "pending" && isInvitee && (
-          <div style={{ textAlign: "center" }}>
-            <p>You've been invited to play {gameLabel(session.type)}!</p>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "12px" }}>
-              <button type="button" onClick={onAccept}>Accept</button>
-              <button type="button" onClick={onDecline}>Decline</button>
-            </div>
-          </div>
-        )}
-
-        {session.status === "pending" && !isInvitee && (
-          <div style={{ textAlign: "center" }}>
-            <p>Waiting for the other player to accept…</p>
-            <button type="button" onClick={onCancel}>Cancel invite</button>
-          </div>
-        )}
 
         {session.status === "declined" && <p style={{ textAlign: "center" }}>Invite was declined.</p>}
         {session.status === "cancelled" && <p style={{ textAlign: "center" }}>Invite was cancelled.</p>}

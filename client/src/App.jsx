@@ -3190,6 +3190,10 @@ function App() {
         <GameOverlay
           session={gameSessionsByConv[openGameConvId]}
           myUserId={userId}
+          members={(conversations.find((c) => c.id === openGameConvId)?.members || []).map((m) => ({
+            ...m,
+            avatarUrl: m.avatarUrl ? mediaSrc(m.avatarUrl) : null,
+          }))}
           onMove={gameMove}
           onAccept={gameAccept}
           onDecline={gameDecline}
