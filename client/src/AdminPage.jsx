@@ -251,7 +251,7 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
         </div>
       )}
 
-      <div className="list-page-body adminx-body">
+      <div className="adminx-body">
         {actionError && <div className="list-page-empty admin-error">{actionError}</div>}
         {error && <div className="list-page-empty admin-error">{error}</div>}
         {!error && loading && !users && <div className="list-page-empty">Loading users…</div>}
@@ -402,7 +402,7 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
         </div>
       )}
 
-      <div className="list-page-body adminx-body">
+      <div className="adminx-body">
         {!error && groups === null && <div className="list-page-empty">Loading groups…</div>}
         {!error && groups && groups.length === 0 && (
           <div className="list-page-empty">No groups yet.</div>
@@ -410,7 +410,7 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
 
         {!error && groups && groups.length > 0 && (
           <div className="adminx-table">
-            <div className="adminx-row adminx-row-head">
+            <div className="adminx-row adminx-row-head adminx-row-groups">
               <span>Group</span>
               <span>Created By</span>
               <span>Members</span>
@@ -418,7 +418,7 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
             </div>
 
             {groups.map((g) => (
-              <div key={g.id} className="adminx-row">
+              <div key={g.id} className="adminx-row adminx-row-groups">
                 <div className="adminx-user-cell">
                   <span className="avatar admin-avatar adminx-avatar">
                     {g.avatarUrl ? <img src={resolveAvatar(g.avatarUrl)} alt="" /> : initials(g.name)}
