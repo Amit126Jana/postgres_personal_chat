@@ -2209,7 +2209,7 @@ function App() {
                     <span className="roster-preview">
                       {c.lastReaction &&
                       (!c.lastMessage || c.lastReaction.createdAt > c.lastMessage.createdAt)
-                        ? `${c.lastReaction.fromUsername} reacted ${labelForReactionKey(c.lastReaction.emoji)} to a message`
+                        ? `${c.lastReaction.fromUsername === usernameRef.current ? "You" : c.lastReaction.fromUsername} reacted ${labelForReactionKey(c.lastReaction.emoji)} to a message`
                         : previewForLastMessage(c.lastMessage)}
                     </span>
                   </span>
