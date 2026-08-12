@@ -2764,7 +2764,7 @@ textarea {
   margin: 0 24px 0;
   border: 1px solid var(--line);
   border-radius: 14px;
-  overflow: hidden;
+  overflow-x: auto;
 }
 .adminx-row {
   display: grid;
@@ -2773,9 +2773,11 @@ textarea {
   gap: 10px;
   padding: 14px 18px;
   border-top: 1px solid var(--line);
+  min-width: 640px;
 }
 .adminx-row-groups {
   grid-template-columns: 2.2fr 1.2fr 1fr 1fr;
+  min-width: 520px;
 }
 .adminx-row:first-child {
   border-top: none;
@@ -2907,9 +2909,11 @@ textarea {
   .adminx-row {
     grid-template-columns: 1fr;
     row-gap: 8px;
+    min-width: 0;
   }
   .adminx-row-groups {
     grid-template-columns: 1fr;
+    min-width: 0;
   }
   .adminx-row-head {
     display: none;

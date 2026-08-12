@@ -37,6 +37,8 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
   const [sortBy, setSortBy] = useState("active"); // active | name | newest
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [page, setPage] = useState(1);
+  const [groupPageSize, setGroupPageSize] = useState(PAGE_SIZES[0]);
+  const [groupPage, setGroupPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [actionError, setActionError] = useState("");
   const [busyId, setBusyId] = useState(null);
@@ -115,6 +117,10 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
     setPage(1);
   }, [query, statusFilter, sortBy, pageSize]);
 
+  useEffect(() => {
+    setGroupPage(1);
+  }, [groupPageSize]);
+
   const allUsers = users || [];
   const onlineCount = allUsers.filter((u) => u.online).length;
   const suspendedCount = allUsers.filter((u) => u.status === "suspended").length;
@@ -144,6 +150,11 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const allGroups = groups || [];
+  const groupTotalPages = Math.max(1, Math.ceil(allGroups.length / groupPageSize));
+  const safeGroupPage = Math.min(groupPage, groupTotalPages);
+  const groupPageRows = allGroups.slice((safeGroupPage - 1) * groupPageSize, safeGroupPage * groupPageSize);
 
   return (
     <div className={"admin-page adminx" + (standalone ? " admin-page-standalone" : "")}>
@@ -398,7 +409,7 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
 
       {groups && (
         <div className="admin-summary">
-          {groups.length} group{groups.length === 1 ? "" : "s"} total
+          {allGroups.length} group{allGroups.length === 1 ? "" : "s"} total
         </div>
       )}
 
@@ -417,7 +428,7 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
               <span>Created</span>
             </div>
 
-            {groups.map((g) => (
+            {groupPageRows.map((g) => (
               <div key={g.id} className="adminx-row adminx-row-groups">
                 <div className="adminx-user-cell">
                   <span className="avatar admin-avatar adminx-avatar">
@@ -440,6 +451,46 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
           </div>
         )}
       </div>
+
+      {groups && groups.length > 0 && (
+        <div className="adminx-footer">
+          <label className="adminx-sort">
+            <select
+              className="adminx-select"
+              value={groupPageSize}
+              onChange={(e) => setGroupPageSize(Number(e.target.value))}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n} per page
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="adminx-pagination">
+            <button
+              type="button"
+              className="adminx-page-btn"
+              disabled={safeGroupPage <= 1}
+              onClick={() => setGroupPage((p) => Math.max(1, p - 1))}
+            >
+              ‹
+            </button>
+            <span className="adminx-page-current">{safeGroupPage}</span>
+            <button
+              type="button"
+              className="adminx-page-btn"
+              disabled={safeGroupPage >= groupTotalPages}
+              onClick={() => setGroupPage((p) => Math.min(groupTotalPages, p + 1))}
+            >
+              ›
+            </button>
+          </div>
+          <div className="adminx-page-of">
+            Page {safeGroupPage} of {groupTotalPages}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
