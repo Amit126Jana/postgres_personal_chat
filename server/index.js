@@ -8,6 +8,7 @@ import { v2 as cloudinary } from "cloudinary";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Server } from "socket.io";
+import { verifyOtpIdToken } from "./firebaseAdmin.js";
 import {
   initDb,
   createUser,
@@ -247,6 +248,72 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (err) {
     console.error("login failed:", err.message);
     res.status(500).json({ error: "Could not log in right now." });
+  }
+});
+
+// --- Auth: OTP (Firebase phone auth) — one endpoint for both register and login ---
+// The client verifies the OTP with Firebase itself and sends up the resulting ID
+// token; we only need to confirm that token is genuine and pull the verified phone
+// number out of it. If no account exists yet for that number, `username` must be
+// supplied (the client asks for a name after a first-time OTP verification) and we
+// create the account; otherwise this behaves like a normal login.
+app.post("/api/auth/otp", async (req, res) => {
+  try {
+    const { idToken, username } = req.body || {};
+    if (!idToken) return res.status(400).json({ error: "Missing verification token." });
+
+    let phone;
+    try {
+      phone = await verifyOtpIdToken(idToken);
+    } catch (err) {
+      console.error("OTP token verification failed:", err.message);
+      return res.status(401).json({ error: "Could not verify that OTP session. Please try again." });
+    }
+    // Firebase phone numbers are E.164 (e.g. "+919876543210"); normalize the same way
+    // the password-auth routes do so both flows land on the same account.
+    phone = phone.trim().replace(/[\s-]/g, "");
+
+    const existing = await getUserWithPasswordByPhone(phone);
+
+    if (existing) {
+      if (existing.status === "suspended") {
+        return res.status(403).json({ error: "This account has been suspended.", suspended: true });
+      }
+      await touchLastSeen(existing.id);
+      await syncAdminFlag(existing.phone_number);
+      const token = signToken(existing.id);
+      const user = {
+        id: existing.id,
+        phoneNumber: existing.phone_number,
+        username: existing.username,
+        avatarUrl: existing.avatar_url,
+        coverUrl: existing.cover_url,
+        tagline: existing.tagline,
+        themeColor: existing.theme_color,
+        showOnline: !!existing.show_online,
+        isAdmin: !!existing.is_admin || ADMIN_PHONE_NUMBERS.has(existing.phone_number),
+      };
+      return res.json({ token, user });
+    }
+
+    // No account yet for this phone number — this is a first-time OTP sign-in. Ask
+    // the client for a display name before we create the account.
+    const name = (username || "").toString().trim().slice(0, 24);
+    if (!name) {
+      return res.json({ needsUsername: true, phoneNumber: phone });
+    }
+    if (name.length < 2 || !NAME_REGEX.test(name)) {
+      return res.status(400).json({ error: "Name can only contain letters, spaces, and . ' -" });
+    }
+
+    const user = await createUser(phone, name, null);
+    await syncAdminFlag(phone);
+    const token = signToken(user.id);
+    res.status(201).json({ token, user: { ...user, isAdmin: ADMIN_PHONE_NUMBERS.has(phone) } });
+  } catch (err) {
+    if (err.code === "PHONE_TAKEN") return res.status(409).json({ error: err.message });
+    console.error("OTP auth failed:", err.message);
+    res.status(500).json({ error: "Could not complete OTP sign-in right now." });
   }
 });
 
