@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import EmojiPickerReact, { Theme } from "emoji-picker-react";
 
 const BASE_WIDTH = 336;
-const BASE_HEIGHT = 400;
+const BASE_HEIGHT = 440;
 const VIEWPORT_MARGIN = 12;
 const MAX_RECORD_SECONDS = 12;
 
@@ -71,32 +71,35 @@ export default function ReactionPicker({ onSelect, onClose, anchorClass = "", up
     ? { position: "fixed", top: pos.top, left: pos.left, bottom: "auto", right: "auto" }
     : { visibility: "hidden" };
 
+  const TABS = [
+    { key: "emoji", label: "Emoji", icon: "emoji-icon" },
+    { key: "sticker", label: "Stickers", icon: "image-icon" },
+    { key: "voice", label: "Voice", icon: "mic-icon" },
+    { key: "video", label: "Video", icon: "video-call-icon" },
+  ];
+
   return (
     <div className={"emoji-picker-wrap " + anchorClass} ref={ref} style={wrapStyle}>
-      <div style={{ width: size.width, background: "var(--surface)", borderRadius: "10px", overflow: "hidden" }}>
-        <div style={{ display: "flex", borderBottom: "1px solid var(--line)" }}>
-          {[
-            { key: "emoji", label: "😊" },
-            { key: "sticker", label: "🎊 Stickers" },
-            { key: "voice", label: "🎙 Voice" },
-            { key: "video", label: "🎥 Video" },
-          ].map((t) => (
+      <div className="rp-panel" style={{ width: size.width }}>
+        <div className="rp-header">
+          <span className="rp-header-icon">
+            <svg className="icon" width="15" height="15"><use href="#emoji-icon" /></svg>
+          </span>
+          <span className="rp-header-title">Reactions</span>
+          <button type="button" className="rp-header-close" onClick={onClose} aria-label="Close">
+            <svg className="icon" width="13" height="13"><use href="#close-icon" /></svg>
+          </button>
+        </div>
+
+        <div className="rp-tabs">
+          {TABS.map((t) => (
             <button
               key={t.key}
               type="button"
               onClick={() => setTab(t.key)}
-              style={{
-                flex: 1,
-                padding: "8px 4px",
-                fontSize: "12px",
-                fontWeight: tab === t.key ? 700 : 500,
-                background: tab === t.key ? "var(--surface-2)" : "transparent",
-                border: "none",
-                borderBottom: tab === t.key ? "2px solid var(--signal)" : "2px solid transparent",
-                cursor: "pointer",
-                color: "var(--text)",
-              }}
+              className={"rp-tab" + (tab === t.key ? " active" : "")}
             >
+              <svg className="icon" width="15" height="15"><use href={`#${t.icon}`} /></svg>
               {t.label}
             </button>
           ))}
@@ -108,47 +111,29 @@ export default function ReactionPicker({ onSelect, onClose, anchorClass = "", up
             theme={Theme.DARK}
             autoFocusSearch={false}
             width={size.width}
-            height={size.height - 40}
+            height={size.height - 78}
             previewConfig={{ showPreview: false }}
             searchDisabled={false}
           />
         )}
 
         {tab === "sticker" && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "6px",
-              padding: "10px",
-              height: size.height - 40,
-              overflowY: "auto",
-            }}
-          >
-            {STICKERS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onSelect(`sticker:${s}`)}
-                style={{
-                  fontSize: "22px",
-                  padding: "10px 4px",
-                  borderRadius: "10px",
-                  border: "1px solid var(--line)",
-                  background: "var(--surface-2)",
-                  cursor: "pointer",
-                }}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="rp-section-label">Frequently used</div>
+            <div className="rp-sticker-grid" style={{ height: size.height - 100 }}>
+              {STICKERS.map((s) => (
+                <button key={s} type="button" className="rp-sticker" onClick={() => onSelect(`sticker:${s}`)}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </>
         )}
 
         {tab === "voice" && (
           <MediaReactionRecorder
             kind="voice"
-            height={size.height - 40}
+            height={size.height - 78}
             uploadFile={uploadFile}
             mediaSrc={mediaSrc}
             onSelect={onSelect}
@@ -158,7 +143,7 @@ export default function ReactionPicker({ onSelect, onClose, anchorClass = "", up
         {tab === "video" && (
           <MediaReactionRecorder
             kind="video"
-            height={size.height - 40}
+            height={size.height - 78}
             uploadFile={uploadFile}
             mediaSrc={mediaSrc}
             onSelect={onSelect}
@@ -266,39 +251,41 @@ function MediaReactionRecorder({ kind, height, uploadFile, mediaSrc, onSelect })
   }
 
   return (
-    <div
-      style={{
-        height,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "10px",
-        padding: "12px",
-        textAlign: "center",
-      }}
-    >
+    <div className="rp-record" style={{ height }}>
       {status === "idle" && (
         <>
-          <div style={{ fontSize: "32px" }}>{kind === "video" ? "🎥" : "🎙️"}</div>
-          <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: 0 }}>
+          <div className="rp-record-circle-wrap">
+            <span className="rp-record-ring" />
+            <button type="button" className="rp-record-btn" onClick={startRecording} aria-label="Start recording">
+              <svg className="icon" width="22" height="22">
+                <use href={`#${kind === "video" ? "video-call-icon" : "mic-icon"}`} />
+              </svg>
+            </button>
+          </div>
+          <p className="rp-record-copy">
             Record a short {kind} reaction (up to {MAX_RECORD_SECONDS}s)
           </p>
-          <button type="button" onClick={startRecording}>
-            ● Start recording
-          </button>
+          <span className="rp-record-hint">Tap to start recording</span>
         </>
       )}
 
       {status === "recording" && (
         <>
-          {kind === "video" && (
-            <video ref={videoPreviewRef} style={{ width: 160, borderRadius: 8, background: "#000" }} />
+          {kind === "video" ? (
+            <video ref={videoPreviewRef} className="rp-record-preview-media" style={{ height: 120 }} />
+          ) : (
+            <div className="rp-record-circle-wrap">
+              <span className="rp-record-ring live" />
+              <span className="rp-record-btn">
+                <svg className="icon" width="22" height="22"><use href="#mic-icon" /></svg>
+              </span>
+            </div>
           )}
-          <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--danger, #d9534f)" }}>
-            ● Recording… {seconds}s / {MAX_RECORD_SECONDS}s
+          <div className="rp-record-live-label">
+            <span className="rp-record-dot" />
+            Recording… {seconds}s / {MAX_RECORD_SECONDS}s
           </div>
-          <button type="button" onClick={stopRecording}>
+          <button type="button" className="rp-btn" onClick={stopRecording}>
             ■ Stop
           </button>
         </>
@@ -307,27 +294,29 @@ function MediaReactionRecorder({ kind, height, uploadFile, mediaSrc, onSelect })
       {status === "preview" && blobUrl && (
         <>
           {kind === "video" ? (
-            <video src={blobUrl} controls style={{ width: 160, borderRadius: 8 }} />
+            <video src={blobUrl} controls className="rp-record-preview-media" />
           ) : (
             <audio src={blobUrl} controls />
           )}
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button type="button" onClick={retake}>
+          <div className="rp-record-actions">
+            <button type="button" className="rp-btn" onClick={retake}>
               Retake
             </button>
-            <button type="button" onClick={confirmSend}>
+            <button type="button" className="rp-btn rp-btn-primary" onClick={confirmSend}>
+              <svg className="icon" width="13" height="13"><use href="#send-icon" /></svg>
               Send reaction
             </button>
           </div>
+          {errorMsg && <div className="rp-record-error">{errorMsg}</div>}
         </>
       )}
 
-      {status === "uploading" && <p style={{ fontSize: "12px" }}>Uploading…</p>}
+      {status === "uploading" && <p className="rp-record-copy">Uploading…</p>}
 
       {status === "error" && (
         <>
-          <p style={{ fontSize: "12px", color: "var(--danger, #d9534f)" }}>{errorMsg}</p>
-          <button type="button" onClick={() => setStatus("idle")}>
+          <div className="rp-record-error">{errorMsg}</div>
+          <button type="button" className="rp-btn" onClick={() => setStatus("idle")}>
             Try again
           </button>
         </>

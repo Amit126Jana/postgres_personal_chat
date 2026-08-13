@@ -1281,11 +1281,14 @@ textarea {
   background: var(--surface);
   color: var(--text);
   font-size: 11.5px;
-  padding: 2px 8px;
+  font-weight: 600;
+  padding: 3px 9px;
   border-radius: 20px;
+  transition: transform 0.1s ease;
 }
 .reaction-pill.mine-pill {
   border-color: var(--signal);
+  background: rgba(var(--signal-rgb), 0.14);
   color: var(--signal);
 }
 .typing-slot {
@@ -3530,9 +3533,323 @@ label.modal-user-row {
 
 /* ---------------- Emoji picker wrap ---------------- */
 .emoji-picker-wrap {
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
   box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+}
+/* Re-theme the emoji-picker-react library (used inside the Emoji tab and the plain
+   message-composer emoji button) to match the app's signal pink/purple palette
+   instead of its default blue accents. It reads these as CSS custom properties. */
+.emoji-picker-wrap .epr-dark-theme,
+.emoji-picker-wrap .epr-main {
+  --epr-dark-bg-color: var(--surface);
+  --epr-dark-category-icon-active-color: var(--signal);
+  --epr-dark-category-label-bg-color: var(--surface);
+  --epr-dark-highlight-color: var(--signal);
+  --epr-dark-hover-bg-color: rgba(var(--signal-rgb), 0.14);
+  --epr-dark-hover-bg-color-reduced-opacity: rgba(var(--signal-rgb), 0.08);
+  --epr-dark-picker-border-color: var(--line);
+  --epr-dark-search-input-bg-color: var(--surface-2);
+  --epr-dark-search-input-bg-color-active: var(--surface-2);
+  --epr-dark-text-color: var(--text);
+  --epr-dark-focus-bg-color: rgba(var(--signal-rgb), 0.14);
+  --epr-search-border-color: var(--signal);
+  border: none;
+}
+.emoji-picker-wrap .epr-emoji-category-label {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.emoji-picker-wrap .epr-search-container input.epr-search {
+  border-radius: 10px;
+}
+.emoji-picker-wrap .epr-category-nav {
+  padding: 8px 10px 4px;
+}
+.emoji-picker-wrap button.epr-cat-btn.epr-active svg {
+  fill: var(--signal);
+}
+.emoji-picker-wrap .epr-preview {
+  border-top-color: var(--line);
+}
+
+/* ---------------- Reaction / attachment picker (redesigned) ---------------- */
+.rp-panel {
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+.rp-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(135deg, rgba(var(--signal-rgb), 0.1), transparent);
+}
+.rp-header-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--signal-gradient, var(--signal));
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(var(--signal-rgb), 0.35);
+}
+.rp-header-title {
+  font-size: 14.5px;
+  font-weight: 800;
+  font-family: var(--display);
+  color: var(--text);
+  flex: 1;
+}
+.rp-header-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.rp-header-close:hover {
+  background: var(--surface-3);
+}
+.rp-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  padding: 0 4px;
+}
+.rp-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.rp-tab:hover {
+  color: var(--text);
+}
+.rp-tab.active {
+  color: var(--signal);
+  border-bottom-color: var(--signal);
+  font-weight: 700;
+}
+.rp-tab .icon {
+  width: 15px;
+  height: 15px;
+}
+.rp-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 12px 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text-faint);
+}
+.rp-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--text);
+  font-size: 13px;
+  flex: 1;
+}
+.rp-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-faint);
+  padding: 8px 12px 4px;
+}
+.rp-sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 10px 12px 12px;
+  overflow-y: auto;
+}
+.rp-sticker {
+  font-size: 22px;
+  padding: 12px 4px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+.rp-sticker:hover {
+  background: rgba(var(--signal-rgb), 0.12);
+  border-color: rgba(var(--signal-rgb), 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(var(--signal-rgb), 0.18);
+}
+.rp-record {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  text-align: center;
+}
+.rp-record-circle-wrap {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rp-record-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--signal-rgb), 0.18), rgba(var(--signal-rgb), 0.04) 70%);
+}
+.rp-record-ring::before,
+.rp-record-ring::after {
+  content: "";
+  position: absolute;
+  inset: -16px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(var(--signal-rgb), 0.28);
+}
+.rp-record-ring::after {
+  inset: -32px;
+  border-style: solid;
+  border-color: rgba(var(--signal-rgb), 0.12);
+}
+.rp-record-ring.live {
+  animation: rp-pulse 1.4s ease-out infinite;
+}
+@keyframes rp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(var(--signal-rgb), 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 16px rgba(var(--signal-rgb), 0);
+  }
+}
+.rp-record-btn {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  background: var(--signal-gradient, var(--signal));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(var(--signal-rgb), 0.4);
+}
+.rp-record-timer {
+  font-family: var(--mono, monospace);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.rp-record-copy {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.rp-record-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.rp-record-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.rp-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rp-btn:hover {
+  background: var(--surface-3);
+}
+.rp-btn-primary {
+  border: none;
+  background: var(--signal-gradient, var(--signal));
+  color: #fff;
+}
+.rp-btn-primary:hover {
+  filter: brightness(1.08);
+}
+.rp-btn-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  padding: 0;
+  justify-content: center;
+}
+.rp-record-preview-media {
+  width: 160px;
+  border-radius: 12px;
+  background: #000;
+}
+.rp-record-live-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--danger, #f1556c);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rp-record-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger, #f1556c);
+  animation: rp-blink 1s ease-in-out infinite;
+}
+@keyframes rp-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+.rp-record-error {
+  font-size: 12px;
+  color: var(--danger, #f1556c);
 }
 
 /* ---------------- Call overlays ---------------- */
