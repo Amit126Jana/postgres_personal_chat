@@ -20,6 +20,7 @@ import PollComposer from "./PollComposer.jsx";
 import PollCard from "./PollCard.jsx";
 import GameHistory from "./GameHistory.jsx";
 import AdminPage from "./AdminPage.jsx";
+import { firebaseAuth } from "./firebase.js";
 import { Client as BeamsClient, TokenProvider as BeamsTokenProvider } from "@pusher/push-notifications-web";
 
 const SERVER_URL =
@@ -1574,6 +1575,7 @@ function App() {
     localStorage.removeItem("mf_token");
     teardownCall();
     socket.disconnect();
+    firebaseAuth.signOut().catch(() => {});
     if (beamsClientRef.current) {
       beamsClientRef.current.stop().catch(() => {});
       beamsClientRef.current = null;

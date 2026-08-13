@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+import { firebaseAuth } from "./firebase.js";
 
 const PHONE_REGEX = /^\+?[1-9]\d{9,14}$/;
 const NAME_REGEX = /^[A-Za-z\s.'-]+$/;
@@ -25,10 +27,56 @@ function validatePassword(value) {
   return "";
 }
 
+// Best-effort conversion to E.164 for Firebase (which requires a leading "+" and
+// country code). If the person already typed a "+", trust it as-is; a bare 10-digit
+// number is assumed to be Indian (matches this app's userbase) — anything else is
+// passed through with a "+" prefix and left for Firebase to reject if it's invalid.
+function toE164(value) {
+  const digits = value.trim().replace(/[\s-]/g, "");
+  if (digits.startsWith("+")) return digits;
+  if (/^\d{10}$/.test(digits)) return `+91${digits}`;
+  return `+${digits}`;
+}
+
+// --- "Remember this device" for OTP: skip re-sending an OTP for 7 days on this
+// browser once the person opts in on a successful verification. This never bypasses
+// the server — it just replays the same app token/user we already got back from
+// /api/auth/otp, the same way logging in normally does.
+const TRUSTED_KEY = "mf_trusted_otp";
+const TRUSTED_DAYS = 7;
+
+function readTrustedSession() {
+  try {
+    const raw = localStorage.getItem(TRUSTED_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data?.phone || !data?.token || !data?.user || !data?.expiresAt) return null;
+    if (Date.now() > data.expiresAt) {
+      localStorage.removeItem(TRUSTED_KEY);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function writeTrustedSession(phone, token, user) {
+  localStorage.setItem(
+    TRUSTED_KEY,
+    JSON.stringify({ phone, token, user, expiresAt: Date.now() + TRUSTED_DAYS * 24 * 60 * 60 * 1000 }),
+  );
+}
+
+function clearTrustedSession() {
+  localStorage.removeItem(TRUSTED_KEY);
+}
+
 // Handles both sign-in and account creation against the REST auth endpoints, then
 // hands the resulting { token, user } up to App once the server confirms the credentials.
 export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
   const [mode, setMode] = useState("login"); // "login" | "register"
+  const [useOtp, setUseOtp] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -37,11 +85,162 @@ export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(initialError || "");
 
+  // --- OTP flow state ---
+  const [otpStep, setOtpStep] = useState("phone"); // "phone" | "code" | "name"
+  const [otpCode, setOtpCode] = useState("");
+  const [otpName, setOtpName] = useState("");
+  const [rememberDevice, setRememberDevice] = useState(true);
+  const confirmationRef = useRef(null);
+  const idTokenRef = useRef(null);
+  const recaptchaRef = useRef(null);
+
+  const trusted = useOtp ? readTrustedSession() : null;
+  const trustedMatchesTyped = trusted && toE164(phoneNumber || trusted.phone) === trusted.phone;
+
+  useEffect(() => {
+    // Cleanup any in-flight reCAPTCHA widget when the OTP panel unmounts/toggles off.
+    return () => {
+      recaptchaRef.current?.clear?.();
+      recaptchaRef.current = null;
+    };
+  }, [useOtp]);
+
+  useEffect(() => {
+    // Pre-fill the phone field with a still-trusted number so "skip OTP" works
+    // without retyping it.
+    if (useOtp && otpStep === "phone" && !phoneNumber) {
+      const remembered = readTrustedSession();
+      if (remembered) setPhoneNumber(remembered.phone);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useOtp]);
+
+  function resetOtpFlow() {
+    setOtpStep("phone");
+    setOtpCode("");
+    setOtpName("");
+    confirmationRef.current = null;
+    idTokenRef.current = null;
+    recaptchaRef.current?.clear?.();
+    recaptchaRef.current = null;
+  }
+
+  function toggleOtp(next) {
+    setUseOtp(next);
+    setError("");
+    resetOtpFlow();
+  }
+
+  async function sendOtp(e) {
+    e.preventDefault();
+    setError("");
+    const phoneErr = validatePhone(phoneNumber);
+    if (phoneErr) return setError(phoneErr);
+
+    // Already verified this number on this device within the last 7 days — skip
+    // sending a new OTP and just resume that session.
+    const remembered = readTrustedSession();
+    if (remembered && remembered.phone === toE164(phoneNumber)) {
+      onAuthenticated(remembered.token, remembered.user);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (!recaptchaRef.current) {
+        recaptchaRef.current = new RecaptchaVerifier(firebaseAuth, "recaptcha-container", {
+          size: "invisible",
+        });
+      }
+      const confirmation = await signInWithPhoneNumber(
+        firebaseAuth,
+        toE164(phoneNumber),
+        recaptchaRef.current,
+      );
+      confirmationRef.current = confirmation;
+      setOtpStep("code");
+    } catch (err) {
+      console.error("Send OTP failed", err);
+      setError(err.message?.includes("invalid-phone-number")
+        ? "That doesn't look like a valid phone number."
+        : "Could not send the OTP. Please try again.");
+      recaptchaRef.current?.clear?.();
+      recaptchaRef.current = null;
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function verifyOtp(e) {
+    e.preventDefault();
+    setError("");
+    if (!/^\d{6}$/.test(otpCode.trim())) return setError("Enter the 6-digit code.");
+
+    setSubmitting(true);
+    try {
+      const credential = await confirmationRef.current.confirm(otpCode.trim());
+      const idToken = await credential.user.getIdToken();
+      idTokenRef.current = idToken;
+
+      const res = await fetch(`${serverUrl}/api/auth/otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(data.error || "Something went wrong. Please try again.");
+        return;
+      }
+      if (data.needsUsername) {
+        setOtpStep("name");
+        return;
+      }
+      if (rememberDevice) writeTrustedSession(toE164(phoneNumber), data.token, data.user);
+      onAuthenticated(data.token, data.user);
+    } catch (err) {
+      console.error("Verify OTP failed", err);
+      setError("That code didn't work — check it and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function finishOtpSignup(e) {
+    e.preventDefault();
+    setError("");
+    const nameErr = validateName(otpName);
+    if (nameErr) return setError(nameErr);
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${serverUrl}/api/auth/otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken: idTokenRef.current, username: otpName.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Something went wrong. Please try again.");
+        return;
+      }
+      if (rememberDevice) writeTrustedSession(toE164(phoneNumber), data.token, data.user);
+      onAuthenticated(data.token, data.user);
+    } catch (err) {
+      console.error("Finish OTP signup failed", err);
+      setError("Could not reach the server. Please check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function switchMode(next) {
     setMode(next);
     setError("");
     setPassword("");
     setConfirmPassword("");
+    resetOtpFlow();
   }
 
   async function handleSubmit(e) {
@@ -123,9 +322,9 @@ export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="gate-form" noValidate>
+        <form onSubmit={handleSubmit} className="gate-form" noValidate style={{ display: useOtp ? "none" : "flex" }}>
           <input
-            autoFocus
+            autoFocus={!useOtp}
             type="tel"
             inputMode="tel"
             maxLength={20}
@@ -193,7 +392,111 @@ export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
           </button>
         </form>
 
+        {useOtp && otpStep === "phone" && (
+          <form onSubmit={sendOtp} className="gate-form" noValidate>
+            <input
+              autoFocus
+              type="tel"
+              inputMode="tel"
+              maxLength={20}
+              placeholder="phone number (e.g. +919876543210)"
+              value={phoneNumber}
+              onChange={(e) => {
+                setPhoneNumber(e.target.value);
+                if (error) setError("");
+              }}
+              required
+            />
+            <label className="gate-checkbox">
+              <input
+                type="checkbox"
+                checked={rememberDevice}
+                onChange={(e) => setRememberDevice(e.target.checked)}
+              />
+              Remember this device — skip OTP for 7 days
+            </label>
+            <button type="submit" disabled={submitting}>
+              {submitting
+                ? "Sending…"
+                : trustedMatchesTyped
+                  ? "Continue — no OTP needed →"
+                  : "Send OTP →"}
+            </button>
+            {trustedMatchesTyped && (
+              <button
+                type="button"
+                className="auth-switch"
+                onClick={() => {
+                  clearTrustedSession();
+                  setError("");
+                }}
+              >
+                Not you? Forget this device
+              </button>
+            )}
+          </form>
+        )}
+
+        {useOtp && otpStep === "code" && (
+          <form onSubmit={verifyOtp} className="gate-form" noValidate>
+            <p className="gate-sub" style={{ margin: "-4px 0 0" }}>
+              Enter the 6-digit code sent to {toE164(phoneNumber)}.
+            </p>
+            <input
+              autoFocus
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="6-digit code"
+              value={otpCode}
+              onChange={(e) => {
+                setOtpCode(e.target.value.replace(/\D/g, ""));
+                if (error) setError("");
+              }}
+              required
+            />
+            <button type="submit" disabled={submitting}>
+              {submitting ? "Verifying…" : "Verify & continue →"}
+            </button>
+            <button type="button" className="auth-switch" onClick={() => setOtpStep("phone")}>
+              Wrong number? Go back
+            </button>
+          </form>
+        )}
+
+        {useOtp && otpStep === "name" && (
+          <form onSubmit={finishOtpSignup} className="gate-form" noValidate>
+            <p className="gate-sub" style={{ margin: "-4px 0 0" }}>
+              Number verified — what should we call you?
+            </p>
+            <input
+              autoFocus
+              type="text"
+              maxLength={24}
+              placeholder="your name"
+              value={otpName}
+              onChange={(e) => {
+                setOtpName(e.target.value);
+                if (error) setError("");
+              }}
+              required
+            />
+            <button type="submit" disabled={submitting}>
+              {submitting ? "Please wait…" : "Create account →"}
+            </button>
+          </form>
+        )}
+
+        {/* Invisible reCAPTCHA anchor for Firebase phone auth — renders nothing visible. */}
+        <div id="recaptcha-container" />
+
         {error && <div className="gate-error">{error}</div>}
+
+        <p className="auth-switch">
+          <button type="button" onClick={() => toggleOtp(!useOtp)}>
+            {useOtp ? "Use phone number & password instead" : "Use OTP instead"}
+          </button>
+        </p>
 
         <p className="auth-switch">
           {mode === "login" ? (

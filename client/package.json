@@ -12,6 +12,7 @@
   "dependencies": {
     "@pusher/push-notifications-web": "^1.1.0",
     "emoji-picker-react": "^4.19.1",
+    "firebase": "^12.17.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "socket.io-client": "^4.7.5"
