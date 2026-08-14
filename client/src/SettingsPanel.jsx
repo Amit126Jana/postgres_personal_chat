@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
 export const THEME_COLORS = [
-  { id: "indigo", hex: "#783fee" },
   { id: "green", hex: "#22c55e" },
   { id: "pink", hex: "#ec4899" },
   { id: "blue", hex: "#38bdf8" },
@@ -11,7 +10,7 @@ export const THEME_COLORS = [
 
 // The app's own logo/icon gradient — used as the default when someone picks
 // "Gradient" without having set custom stops yet.
-export const LOGO_GRADIENT = ["#f97316", "#a855f7"];
+export const LOGO_GRADIENT = ["#7c3aed", "#4f7dff"];
 
 // Theme color is stored server-side as a single VARCHAR string. We encode the
 // three possible shapes into that one string so no schema/API changes are
