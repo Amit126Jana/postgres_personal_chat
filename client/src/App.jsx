@@ -20,6 +20,8 @@ import PollComposer from "./PollComposer.jsx";
 import PollCard from "./PollCard.jsx";
 import GameHistory from "./GameHistory.jsx";
 import AdminPage from "./AdminPage.jsx";
+import NotificationsPanel from "./NotificationsPanel.jsx";
+import PendingRequestsPanel from "./PendingRequestsPanel.jsx";
 import { Client as BeamsClient, TokenProvider as BeamsTokenProvider } from "@pusher/push-notifications-web";
 
 const SERVER_URL =
@@ -84,6 +86,7 @@ function App() {
   const [tagline, setTagline] = useState("");
   const [themeColor, setThemeColor] = useState("grad:#7c3aed,#4f7dff");
   const [showOnline, setShowOnline] = useState(true);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeView, setActiveView] = useState("chats"); // "chats" | "profile" | "groups" | "contacts" | "settings"
   const [darkMode, setDarkMode] = useState(
@@ -177,6 +180,8 @@ function App() {
 
   // --- In-chat mini-games ---
   const [showGamesMenu, setShowGamesMenu] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [showPollComposer, setShowPollComposer] = useState(false);
   const [pollsByMessageId, setPollsByMessageId] = useState({});
   const [historyConvId, setHistoryConvId] = useState(null); // set to a conversationId, or "all", to open history modal
@@ -669,7 +674,19 @@ function App() {
   }
 
   useEffect(() => {
-    socket.on("connect", () => setConnected(true));
+    socket.on("connect", () => {
+      setConnected(true);
+      fetch(`${SERVER_URL}/api/notifications`, {
+        headers: { Authorization: `Bearer ${tokenRef.current}` },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data) return;
+          setUnreadNotifications(data.unread || 0);
+          setPendingRequestsCount(data.pending || 0);
+        })
+        .catch(() => {});
+    });
     socket.on("disconnect", () => setConnected(false));
 
     socket.on(
@@ -683,6 +700,7 @@ function App() {
         tagline: tl,
         themeColor: tc,
         showOnline: so,
+        isPrivate: ip,
         wallpapers: serverWallpapers,
         hiddenMessageIds,
         clearedChats,
@@ -698,6 +716,7 @@ function App() {
         setTagline(tl || "");
         setThemeColor(tc || "violet");
         setShowOnline(so !== false);
+        setIsPrivate(!!ip);
         setIsAdmin(!!adminFlag);
         setWallpapers(serverWallpapers || {});
         setHiddenMsgIds(new Set(hiddenMessageIds || []));
@@ -778,6 +797,38 @@ function App() {
           members: (c.members || []).map((m) => (m.id === uid ? { ...m, online } : m)),
         })),
       );
+    });
+
+    // Notifications & pending chat-request badge counts, kept live via socket pushes
+    // and refreshed once on connect (see loadNotificationCounts below).
+    socket.on("notifications:update", ({ unread, pending }) => {
+      if (typeof unread === "number") setUnreadNotifications(unread);
+      if (typeof pending === "number") setPendingRequestsCount(pending);
+    });
+    socket.on("chatRequest:new", ({ requesterUsername }) => {
+      pushToast("New chat request", `${requesterUsername} wants to chat with you.`);
+    });
+    // Sending a direct-chat request was denied because the other person has a
+    // Private Profile (or has blocked/been-blocked) — offer to send a request instead.
+    socket.on("conversation:direct:denied", async ({ withUserId, reason, username }) => {
+      if (reason === "blocked") {
+        pushToast("Can't start chat", "You can't message this user.");
+        return;
+      }
+      if (reason === "private") {
+        try {
+          const res = await fetch(`${SERVER_URL}/api/chat-requests`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenRef.current}` },
+            body: JSON.stringify({ targetId: withUserId }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "Couldn't send request.");
+          pushToast("Chat request sent", `${username || "This user"} has a private profile — they'll need to accept before you can chat.`);
+        } catch (err) {
+          pushToast("Couldn't send request", err.message || "Please try again.");
+        }
+      }
     });
 
     // Initial conversation list on login.
@@ -1982,6 +2033,34 @@ function App() {
           </svg>
           <span className="rail-label">Groups</span>
         </button>
+        <button
+          type="button"
+          className={"rail-btn" + (activeView === "notifications" ? " active" : "")}
+          title="Notifications"
+          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("notifications"))}
+        >
+          <svg className="icon" width="20" height="20">
+            <use href="#info-icon" />
+          </svg>
+          <span className="rail-label">Notifications</span>
+          {unreadNotifications > 0 && (
+            <span className="rail-badge">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>
+          )}
+        </button>
+        <button
+          type="button"
+          className={"rail-btn" + (activeView === "requests" ? " active" : "")}
+          title="Pending Requests"
+          onClick={() => runOrConfirmLeaveSelect(() => setActiveView("requests"))}
+        >
+          <svg className="icon" width="20" height="20">
+            <use href="#contacts-icon" />
+          </svg>
+          <span className="rail-label">Requests</span>
+          {pendingRequestsCount > 0 && (
+            <span className="rail-badge">{pendingRequestsCount > 99 ? "99+" : pendingRequestsCount}</span>
+          )}
+        </button>
         {isAdmin && (
           <button
             type="button"
@@ -2046,6 +2125,7 @@ function App() {
             tagline,
             themeColor,
             showOnline,
+            isPrivate,
           }}
           connected={connected}
           uploading={avatarUploading}
@@ -2091,6 +2171,26 @@ function App() {
           onCall={(otherId, otherName, avatarUrl, type) => startCall(otherId, otherName, avatarUrl, type)}
           onNewChat={() => setShowNewChat(true)}
           mediaSrc={mediaSrc}
+        />
+      ) : activeView === "notifications" ? (
+        <NotificationsPanel
+          serverUrl={SERVER_URL}
+          token={tokenRef.current}
+          mediaSrc={mediaSrc}
+          onClose={() => setActiveView("chats")}
+          onOpenRequests={() => setActiveView("requests")}
+        />
+      ) : activeView === "requests" ? (
+        <PendingRequestsPanel
+          serverUrl={SERVER_URL}
+          token={tokenRef.current}
+          mediaSrc={mediaSrc}
+          onClose={() => setActiveView("chats")}
+          pushToast={pushToast}
+          onAccepted={() => {
+            setPendingRequestsCount((n) => Math.max(0, n - 1));
+            setActiveView("chats");
+          }}
         />
       ) : activeView === "admin" && isAdmin ? (
         <AdminPage serverUrl={SERVER_URL} token={tokenRef.current} mediaSrc={mediaSrc} />
@@ -3300,6 +3400,8 @@ function App() {
             setShowUserInfo(false);
           }}
           onBlock={handleBlockUser}
+          serverUrl={SERVER_URL}
+          token={tokenRef.current}
         />
       )}
 

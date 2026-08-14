@@ -119,6 +119,8 @@ export default function SettingsPanel({
     () => localStorage.getItem("mf_theme_mode") === "system" ? "system" : darkMode ? "dark" : "light",
   );
   const [showOnline, setShowOnline] = useState(profile.showOnline !== false);
+  const [isPrivate, setIsPrivate] = useState(!!profile.isPrivate);
+  const [privateSaving, setPrivateSaving] = useState(false);
   const [readReceipts, setReadReceipts] = useState(true);
   const [profileVisibility, setProfileVisibility] = useState("everyone");
   const [nameError, setNameError] = useState(""); 
@@ -157,6 +159,24 @@ export default function SettingsPanel({
     } catch (err) {
       setBlockedError(err.message || "Could not load blocked users");
       setBlocked([]);
+    }
+  }
+
+  async function handlePrivateProfileToggle(e) {
+    const next = e.target.checked;
+    setIsPrivate(next);
+    setPrivateSaving(true);
+    try {
+      const res = await fetch(`${serverUrl}/api/account/privacy`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ isPrivate: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setIsPrivate(!next); // revert on failure
+    } finally {
+      setPrivateSaving(false);
     }
   }
 
@@ -470,6 +490,21 @@ export default function SettingsPanel({
               </label>
             </div>
           </ActionRow>
+
+          <div className="settings-action-wrap">
+            <div className="settings-action-row settings-action-row-static">
+              <span className="settings-action-icon">
+                <svg className="icon" width="16" height="16"><use href="#shield-icon" /></svg>
+              </span>
+              <span className="settings-action-main">
+                <span className="settings-action-title">Private Profile</span>
+                <span className="settings-action-sub">
+                  Others must send a chat request before messaging you. Your profile stays visible either way.
+                </span>
+              </span>
+              <ToggleSwitch checked={isPrivate} onChange={handlePrivateProfileToggle} disabled={privateSaving} />
+            </div>
+          </div>
 
           <ActionRow
             icon="eye-icon"

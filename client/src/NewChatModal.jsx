@@ -216,7 +216,14 @@ export default function NewChatModal({
                 <li key={u.id} className="np-user-row" onClick={() => onStartDirect(u.id)}>
                   <span className="avatar np-user-avatar">{u.username.slice(0, 2).toUpperCase()}</span>
                   <span className="np-user-info">
-                    <span className="np-user-name">{u.username}</span>
+                    <span className="np-user-name">
+                      {u.username}
+                      {u.isPrivate && (
+                        <span className="np-private-badge" title="Private profile — you'll need to send a chat request">
+                          🔒
+                        </span>
+                      )}
+                    </span>
                     <span className="np-user-handle">@{u.username.toLowerCase().replace(/\s+/g, "")}</span>
                   </span>
                 </li>

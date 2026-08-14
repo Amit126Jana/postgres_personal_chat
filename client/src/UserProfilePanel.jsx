@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Right-side "User Profile" panel for a direct chat — mirrors the provided mockup.
@@ -18,6 +18,39 @@ export default function UserProfilePanel({
   token,
 }) {
   const [busy, setBusy] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [muteBusy, setMuteBusy] = useState(false);
+
+  useEffect(() => {
+    if (!user || !serverUrl || !token) return;
+    let cancelled = false;
+    fetch(`${serverUrl}/api/mute`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => {
+        if (!cancelled) setMuted((list || []).some((u) => u.id === user.id));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, serverUrl, token]);
+
+  async function handleToggleMute() {
+    setMuteBusy(true);
+    const next = !muted;
+    try {
+      const res = await fetch(`${serverUrl}/api/mute/${user.id}`, {
+        method: next ? "POST" : "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
+      setMuted(next);
+    } catch {
+      /* leave state as-is on failure */
+    } finally {
+      setMuteBusy(false);
+    }
+  }
 
   if (!user) return null;
 
@@ -116,6 +149,15 @@ export default function UserProfilePanel({
         </div>
 
         <div className="info-panel-section">
+          <button type="button" className="info-panel-list-btn" onClick={handleToggleMute} disabled={muteBusy}>
+            <span className="info-panel-row-icon"><svg className="icon" width="16" height="16"><use href="#info-icon" /></svg></span>
+            <div>
+              <div className="info-panel-row-label">{muted ? "Unmute Notifications" : "Mute Notifications"}</div>
+              <div className="info-panel-row-sub">
+                {muted ? "You won't be notified by this user" : "Stop notifications from this user without blocking them"}
+              </div>
+            </div>
+          </button>
           <button type="button" className="info-panel-list-btn" onClick={handleBlock} disabled={busy}>
             <span className="info-panel-row-icon danger"><svg className="icon" width="16" height="16"><use href="#ban-icon" /></svg></span>
             <div>

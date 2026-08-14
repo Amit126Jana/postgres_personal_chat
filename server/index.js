@@ -67,6 +67,24 @@ import {
   updateCallLog,
   getCallLogByMessageId,
   callLogText,
+  setPrivateProfile,
+  directConversationExists,
+  createChatRequest,
+  getPendingRequestBetween,
+  getChatRequestById,
+  updateChatRequestStatus,
+  listIncomingRequests,
+  countPendingRequests,
+  muteUser,
+  unmuteUser,
+  isMuted,
+  listMutedUsers,
+  isBlockedEitherWay,
+  createNotification,
+  listNotifications,
+  countUnreadNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
 } from "./db.js";
 import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_PLAYER_GAMES } from "./games.js";
 import { recordGameResult, getGameHistory } from "./db.js";
@@ -444,6 +462,199 @@ app.delete("/api/blocked/:userId", requireAuth, async (req, res) => {
   try {
     await unblockUser(req.user.id, Number(req.params.userId));
     res.json({ blocked: false });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Private Profile toggle (Settings > Privacy & Security) ---
+app.patch("/api/account/privacy", requireAuth, async (req, res) => {
+  try {
+    await setPrivateProfile(req.user.id, !!req.body?.isPrivate);
+    res.json({ isPrivate: !!req.body?.isPrivate });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Muted users (mute notifications from someone without blocking them) ---
+app.get("/api/mute", requireAuth, async (req, res) => {
+  try {
+    res.json(await listMutedUsers(req.user.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/mute/:userId", requireAuth, async (req, res) => {
+  try {
+    await muteUser(req.user.id, Number(req.params.userId));
+    res.json({ muted: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/mute/:userId", requireAuth, async (req, res) => {
+  try {
+    await unmuteUser(req.user.id, Number(req.params.userId));
+    res.json({ muted: false });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Chat requests (needed to message a Private Profile user for the first time) ---
+
+// Send a chat request to a private-profile user.
+app.post("/api/chat-requests", requireAuth, async (req, res) => {
+  try {
+    const targetId = Number(req.body?.targetId);
+    if (!targetId || targetId === req.user.id) {
+      return res.status(400).json({ error: "Invalid target user." });
+    }
+    if (await isBlockedEitherWay(req.user.id, targetId)) {
+      return res.status(403).json({ error: "You can't message this user." });
+    }
+    if (await directConversationExists(req.user.id, targetId)) {
+      return res.status(400).json({ error: "You already have a chat with this user." });
+    }
+    const request = await createChatRequest(req.user.id, targetId);
+    await createNotification(targetId, "chat_request", req.user.id, { requestId: request.id });
+    const unread = await countUnreadNotifications(targetId);
+    const pending = await countPendingRequests(targetId);
+    for (const sid of userSockets.get(targetId) || []) {
+      io.to(sid).emit("notifications:update", { unread, pending });
+      io.to(sid).emit("chatRequest:new", {
+        id: request.id,
+        requesterId: req.user.id,
+        requesterUsername: req.user.username,
+        requesterAvatarUrl: req.user.avatarUrl,
+        createdAt: request.created_at,
+      });
+    }
+    res.status(201).json(request);
+  } catch (err) {
+    if (err.code === "BLOCKED") return res.status(403).json({ error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/chat-requests", requireAuth, async (req, res) => {
+  try {
+    res.json(await listIncomingRequests(req.user.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Accept a chat request: creates (or resumes) the direct conversation for both sides.
+app.post("/api/chat-requests/:id/accept", requireAuth, async (req, res) => {
+  try {
+    const request = await getChatRequestById(Number(req.params.id));
+    if (!request || request.target_id !== req.user.id || request.status !== "pending") {
+      return res.status(404).json({ error: "Request not found." });
+    }
+    await updateChatRequestStatus(request.id, "accepted");
+    const conversationId = await getOrCreateDirectConversation(request.requester_id, req.user.id);
+    await createNotification(request.requester_id, "chat_request_accepted", req.user.id, {
+      conversationId,
+    });
+
+    for (const sid of userSockets.get(request.requester_id) || []) {
+      io.sockets.sockets.get(sid)?.join(convRoom(conversationId));
+      const [theirConversation] = (await getUserConversations(request.requester_id)).filter(
+        (c) => c.id === conversationId,
+      );
+      io.to(sid).emit("conversation:new", theirConversation);
+      io.to(sid).emit("notifications:update", {
+        unread: await countUnreadNotifications(request.requester_id),
+        pending: await countPendingRequests(request.requester_id),
+      });
+    }
+    for (const sid of userSockets.get(req.user.id) || []) {
+      io.sockets.sockets.get(sid)?.join(convRoom(conversationId));
+      const [myConversation] = (await getUserConversations(req.user.id)).filter(
+        (c) => c.id === conversationId,
+      );
+      io.to(sid).emit("conversation:new", myConversation);
+      io.to(sid).emit("notifications:update", {
+        unread: await countUnreadNotifications(req.user.id),
+        pending: await countPendingRequests(req.user.id),
+      });
+    }
+    res.json({ accepted: true, conversationId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/chat-requests/:id/reject", requireAuth, async (req, res) => {
+  try {
+    const request = await getChatRequestById(Number(req.params.id));
+    if (!request || request.target_id !== req.user.id || request.status !== "pending") {
+      return res.status(404).json({ error: "Request not found." });
+    }
+    await updateChatRequestStatus(request.id, "rejected");
+    for (const sid of userSockets.get(req.user.id) || []) {
+      io.to(sid).emit("notifications:update", {
+        unread: await countUnreadNotifications(req.user.id),
+        pending: await countPendingRequests(req.user.id),
+      });
+    }
+    res.json({ rejected: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Blocks the requester AND rejects the request in one step.
+app.post("/api/chat-requests/:id/block", requireAuth, async (req, res) => {
+  try {
+    const request = await getChatRequestById(Number(req.params.id));
+    if (!request || request.target_id !== req.user.id) {
+      return res.status(404).json({ error: "Request not found." });
+    }
+    if (request.status === "pending") await updateChatRequestStatus(request.id, "rejected");
+    await blockUser(req.user.id, request.requester_id);
+    for (const sid of userSockets.get(req.user.id) || []) {
+      io.to(sid).emit("notifications:update", {
+        unread: await countUnreadNotifications(req.user.id),
+        pending: await countPendingRequests(req.user.id),
+      });
+    }
+    res.json({ blocked: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Notifications (sidebar Notifications panel) ---
+app.get("/api/notifications", requireAuth, async (req, res) => {
+  try {
+    res.json({
+      items: await listNotifications(req.user.id),
+      unread: await countUnreadNotifications(req.user.id),
+      pending: await countPendingRequests(req.user.id),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/notifications/:id/read", requireAuth, async (req, res) => {
+  try {
+    await markNotificationRead(Number(req.params.id), req.user.id);
+    res.json({ unread: await countUnreadNotifications(req.user.id) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
+  try {
+    await markAllNotificationsRead(req.user.id);
+    res.json({ unread: 0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -917,6 +1128,7 @@ io.on("connection", async (socket) => {
       themeColor: user.themeColor,
       showOnline: user.showOnline,
       isAdmin: user.isAdmin,
+      isPrivate: user.isPrivate,
       wallpapers,
       hiddenMessageIds,
       clearedChats,
@@ -1006,6 +1218,24 @@ io.on("connection", async (socket) => {
     const me = onlineUsers.get(socket.id);
     if (!me || !withUserId) return;
     try {
+      if (await isBlockedEitherWay(me.userId, withUserId)) {
+        socket.emit("conversation:direct:denied", { withUserId, reason: "blocked" });
+        return;
+      }
+      // Private-profile users can't be messaged directly by someone new — unless a
+      // conversation already exists (kept working even if privacy is toggled on later).
+      const alreadyConnected = await directConversationExists(me.userId, withUserId);
+      if (!alreadyConnected) {
+        const target = await getUserById(withUserId);
+        if (target?.isPrivate) {
+          socket.emit("conversation:direct:denied", {
+            withUserId,
+            reason: "private",
+            username: target.username,
+          });
+          return;
+        }
+      }
       const conversationId = await getOrCreateDirectConversation(me.userId, withUserId);
       socket.join(convRoom(conversationId));
       // Make sure the other party (if online) also joins the room live.
@@ -1069,6 +1299,13 @@ io.on("connection", async (socket) => {
     const me = onlineUsers.get(socket.id);
     if (!me || !conversationId) return;
     if (!(await isConversationMember(conversationId, me.userId))) return;
+
+    // For direct chats, stop delivery entirely if either side has blocked the other.
+    const memberIds = await getConversationMemberIds(conversationId);
+    if (memberIds.length === 2) {
+      const otherId = memberIds.find((id) => id !== me.userId);
+      if (otherId && (await isBlockedEitherWay(me.userId, otherId))) return;
+    }
 
     const kind = type && type !== "text" ? type : "text";
     if (kind === "text" && !text?.toString().trim()) return;
