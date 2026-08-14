@@ -764,6 +764,8 @@ textarea {
   gap: 5px;
   border-radius: 999px;
   padding: 7px 14px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .request-btn.reject {
   border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
@@ -5053,6 +5055,28 @@ label.modal-user-row {
   }
   .desktop-only-btn {
     display: none;
+  }
+  .notif-tabs {
+    position: relative;
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+  }
+  .pending-requests-panel .request-row {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+  .pending-requests-panel .request-info {
+    flex-basis: 0;
+  }
+  .pending-requests-panel .request-actions {
+    flex: 1 1 100%;
+    align-self: stretch;
+    justify-content: stretch;
+    gap: 8px;
+  }
+  .pending-requests-panel .request-btn {
+    flex: 1;
+    justify-content: center;
   }
     .composer {
     padding: 10px 12px;
