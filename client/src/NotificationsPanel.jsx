@@ -23,7 +23,7 @@ function describe(n) {
   }
 }
 
-export default function NotificationsPanel({ serverUrl, token, mediaSrc, onClose, onOpenRequests }) {
+export default function NotificationsPanel({ serverUrl, token, mediaSrc, onClose, onOpenRequests, onUnreadChange }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState("");
   const resolveMedia = mediaSrc || ((url) => url);
@@ -42,6 +42,7 @@ export default function NotificationsPanel({ serverUrl, token, mediaSrc, onClose
       if (!res.ok) throw new Error();
       const data = await res.json();
       setItems(data.items || []);
+      if (typeof data.unread === "number") onUnreadChange?.(data.unread);
     } catch {
       setError("Couldn't load notifications.");
       setItems([]);
@@ -49,12 +50,13 @@ export default function NotificationsPanel({ serverUrl, token, mediaSrc, onClose
   }
 
   async function markAllRead() {
+    setItems((prev) => (prev || []).map((n) => ({ ...n, read: true })));
+    onUnreadChange?.(0);
     try {
       await fetch(`${serverUrl}/api/notifications/read-all`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-      setItems((prev) => (prev || []).map((n) => ({ ...n, read: true })));
     } catch {
       /* best effort */
     }
@@ -63,10 +65,12 @@ export default function NotificationsPanel({ serverUrl, token, mediaSrc, onClose
   async function markOneRead(id) {
     setItems((prev) => (prev || []).map((n) => (n.id === id ? { ...n, read: true } : n)));
     try {
-      await fetch(`${serverUrl}/api/notifications/${id}/read`, {
+      const res = await fetch(`${serverUrl}/api/notifications/${id}/read`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      const data = await res.json().catch(() => ({}));
+      if (typeof data.unread === "number") onUnreadChange?.(data.unread);
     } catch {
       /* best effort */
     }

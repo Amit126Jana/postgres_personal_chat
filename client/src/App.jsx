@@ -2179,6 +2179,7 @@ function App() {
           mediaSrc={mediaSrc}
           onClose={() => setActiveView("chats")}
           onOpenRequests={() => setActiveView("requests")}
+          onUnreadChange={setUnreadNotifications}
         />
       ) : activeView === "requests" ? (
         <PendingRequestsPanel

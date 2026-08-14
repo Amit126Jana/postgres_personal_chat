@@ -1627,7 +1627,8 @@ textarea {
 .profile-page,
 .groups-page,
 .contacts-page,
-.admin-page {
+.admin-page,
+.page-panel {
   background: var(--surface);
   border-right: 1px solid var(--line);
   grid-column: 2 / span 2;
@@ -4649,6 +4650,16 @@ label.modal-user-row {
     justify-content: center;
     padding: 0;
   }
+  .rail-btn .rail-badge {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    margin-left: 0;
+    min-width: 16px;
+    height: 16px;
+    font-size: 10px;
+    padding: 0 4px;
+  }
   .rail-user-card {
     justify-content: center;
     padding: 8px 0;
@@ -4677,7 +4688,8 @@ label.modal-user-row {
   .profile-page,
   .groups-page,
   .contacts-page,
-  .admin-page {
+  .admin-page,
+  .page-panel {
     grid-column: 2;
     width: 100%;
     min-height: 0;
