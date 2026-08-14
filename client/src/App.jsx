@@ -116,6 +116,8 @@ function App() {
 
   // --- Full-size avatar preview (lightbox) ---
   const [lightboxImage, setLightboxImage] = useState(null); // url string | null
+  // Full-chat media gallery: { items: [{id, mediaUrl, mediaName, type}], index } | null
+  const [mediaGallery, setMediaGallery] = useState(null);
 
   // --- Group Info / User Profile side panels ---
   const [showGroupInfo, setShowGroupInfo] = useState(false);
@@ -153,6 +155,11 @@ function App() {
   // "login:success" handler below) so they persist across logout/sessions/devices —
   // not just kept in this browser's localStorage.
   const [selectMode, setSelectMode] = useState(false);
+  // The message currently being replied to (or null). Cleared once the reply is sent
+  // or the user cancels it from the composer's quoted-preview bar.
+  const [replyingTo, setReplyingTo] = useState(null);
+  // Right-click / long-press context menu: { messageId, x, y } or null.
+  const [msgContextMenu, setMsgContextMenu] = useState(null);
   const [selectedMsgIds, setSelectedMsgIds] = useState(() => new Set());
   const [hiddenMsgIds, setHiddenMsgIds] = useState(() => new Set()); // Set(messageId) — "deleted for me"
   const [clearedAt, setClearedAt] = useState({}); // conversationId -> timestamp — "clear chat"
@@ -1249,6 +1256,45 @@ function App() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [selectMode]);
 
+  // Keyboard support for the full-screen media gallery: arrows to move between
+  // items, Escape to close. Only active while the gallery is actually open.
+  useEffect(() => {
+    if (!mediaGallery) return;
+    function onKeyDown(e) {
+      if (e.key === "Escape") {
+        setMediaGallery(null);
+      } else if (e.key === "ArrowLeft") {
+        setMediaGallery((prev) => (prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev));
+      } else if (e.key === "ArrowRight") {
+        setMediaGallery((prev) =>
+          prev && prev.index < prev.items.length - 1 ? { ...prev, index: prev.index + 1 } : prev,
+        );
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mediaGallery]);
+
+  // Also close the right-click context menu on Escape or if the window scrolls/resizes
+  // out from under it, so it never lingers pointing at a stale position.
+  useEffect(() => {
+    if (!msgContextMenu) return;
+    function close() {
+      setMsgContextMenu(null);
+    }
+    function onKeyDown(e) {
+      if (e.key === "Escape") close();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [msgContextMenu]);
+
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -1319,8 +1365,10 @@ function App() {
       conversationId: activeConvId,
       text,
       type: "text",
+      replyToId: replyingTo?.id || null,
     });
     setDraft("");
+    setReplyingTo(null);
     socket.emit("typing", { conversationId: activeConvId, isTyping: false });
   }
 
@@ -1478,11 +1526,16 @@ function App() {
     setPendingPreview(null);
   }
 
-  // Actually uploads + sends every staged file, in the order they were added.
+  // Actually uploads + sends every staged file, in the order they were added. Only
+  // the first file in a batch carries the reply reference — replying with a 5-photo
+  // batch shouldn't quote the same original message 5 times in a row.
   async function sendPendingFiles() {
     if (pendingFiles.length === 0 || !activeConvId) return;
     setUploading(true);
+    const replyToId = replyingTo?.id || null;
+    setReplyingTo(null);
     try {
+      let first = true;
       for (const { file } of pendingFiles) {
         try {
           const { mediaUrl, mediaName, type } = await uploadFile(file);
@@ -1491,7 +1544,9 @@ function App() {
             type,
             mediaUrl,
             mediaName,
+            replyToId: first ? replyToId : null,
           });
+          first = false;
         } catch (err) {
           console.error("Upload failed", err);
           alert(`Couldn't send "${file.name || "file"}". Please try a smaller file (max 25MB).`);
@@ -1755,6 +1810,16 @@ function App() {
     setSelectedMsgIds(seedMsgId != null ? new Set([seedMsgId]) : new Set());
   }
 
+  // Opens the full-screen media viewer for a clicked image/video, pre-loaded with
+  // every image/video message in this conversation so the person can swipe/arrow
+  // through everything that was ever shared here — not just the one they clicked.
+  function openMediaGallery(messageId) {
+    const items = activeMessages.filter((m) => !m.deleted && (m.type === "image" || m.type === "video"));
+    const index = items.findIndex((m) => m.id === messageId);
+    if (index === -1) return;
+    setMediaGallery({ items, index });
+  }
+
   function exitSelectMode() {
     setSelectMode(false);
     setSelectedMsgIds(new Set());
@@ -1765,6 +1830,40 @@ function App() {
     const msgs = ids.map((id) => activeMessages.find((m) => m.id === id)).filter(Boolean);
     const canEveryone = msgs.length > 0 && msgs.every((m) => canDeleteMessage(m));
     setDeleteSheet({ ids, canEveryone });
+  }
+
+  async function copyMessageText(m) {
+    if (!m?.text) return;
+    try {
+      await navigator.clipboard.writeText(m.text);
+      pushToast("Copied", "Message text copied to clipboard.");
+    } catch (err) {
+      console.error("Copy failed", err);
+      pushToast("Couldn't copy", "Your browser blocked clipboard access.");
+    }
+  }
+
+  // Downloads a message's media file with its original filename, rather than just
+  // opening it in a new tab (which is all a plain <a href> without cross-origin
+  // access would otherwise do for images/videos).
+  async function saveMediaAs(m) {
+    if (!m?.mediaUrl) return;
+    try {
+      const url = mediaSrc(m.mediaUrl);
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = m.mediaName || url.split("/").pop() || "download";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      console.error("Save failed", err);
+      pushToast("Couldn't save", "There was a problem downloading this file.");
+    }
   }
 
   function confirmDeleteForMe() {
@@ -1967,6 +2066,7 @@ function App() {
 
   function openConversation(convId) {
     setActiveConvId(convId);
+    setReplyingTo(null);
     socket.emit("conversation:read", { conversationId: convId });
     setActiveView("chats");
     setMobileChatOpen(true);
@@ -2998,7 +3098,7 @@ function App() {
                       onContextMenu={(e) => {
                         if (!selectMode && !m.deleted) {
                           e.preventDefault();
-                          startSelectMode(m.id);
+                          setMsgContextMenu({ messageId: m.id, x: e.clientX, y: e.clientY });
                         }
                       }}
                     >
@@ -3100,11 +3200,43 @@ function App() {
                             }
                           }}
                         >
+                          {m.replyToId && (
+                            <div
+                              className="msg-reply-quote"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                scrollToMessage(m.replyToId);
+                              }}
+                            >
+                              <div className="msg-reply-quote-name">{m.replyToUsername || "Unknown"}</div>
+                              <div className="msg-reply-quote-text">
+                                {m.replyToDeleted || !m.replyToUsername
+                                  ? "This message was deleted"
+                                  : m.replyToType === "image"
+                                    ? "📷 Photo"
+                                    : m.replyToType === "video"
+                                      ? "🎥 Video"
+                                      : m.replyToType === "audio"
+                                        ? "🎤 Voice message"
+                                        : m.replyToType === "file"
+                                          ? "📎 File"
+                                          : m.replyToText || ""}
+                              </div>
+                              {m.replyToType === "image" && m.replyToMediaUrl && (
+                                <img src={mediaSrc(m.replyToMediaUrl)} alt="" className="msg-reply-quote-thumb" />
+                              )}
+                            </div>
+                          )}
                           {m.type === "image" && (
                             <img
                               className="msg-media msg-image"
                               src={mediaSrc(m.mediaUrl)}
                               alt={m.mediaName || "image"}
+                              onClick={(e) => {
+                                if (selectMode) return;
+                                e.stopPropagation();
+                                openMediaGallery(m.id);
+                              }}
                             />
                           )}
                           {m.type === "video" && (
@@ -3112,6 +3244,15 @@ function App() {
                               className="msg-media"
                               src={mediaSrc(m.mediaUrl)}
                               controls
+                              onClick={(e) => {
+                                if (selectMode) return;
+                                e.stopPropagation();
+                              }}
+                              onDoubleClick={(e) => {
+                                if (selectMode) return;
+                                e.stopPropagation();
+                                openMediaGallery(m.id);
+                              }}
                             />
                           )}
                           {m.type === "audio" && (
@@ -3310,6 +3451,40 @@ function App() {
                         </button>
                       </div>
                     ))}
+                  </div>
+                )}
+                {replyingTo && (
+                  <div className="composer-reply-bar">
+                    <div className="composer-reply-bar-line" />
+                    <div className="composer-reply-bar-body">
+                      <div className="composer-reply-bar-name">{replyingTo.username}</div>
+                      <div className="composer-reply-bar-text">
+                        {replyingTo.deleted
+                          ? "This message was deleted"
+                          : replyingTo.type === "image"
+                            ? "📷 Photo"
+                            : replyingTo.type === "video"
+                              ? "🎥 Video"
+                              : replyingTo.type === "audio"
+                                ? "🎤 Voice message"
+                                : replyingTo.type === "file"
+                                  ? "📎 " + (replyingTo.mediaName || "File")
+                                  : replyingTo.text || ""}
+                      </div>
+                    </div>
+                    {replyingTo.type === "image" && replyingTo.mediaUrl && (
+                      <img src={mediaSrc(replyingTo.mediaUrl)} alt="" className="composer-reply-bar-thumb" />
+                    )}
+                    <button
+                      type="button"
+                      className="composer-reply-bar-close"
+                      title="Cancel reply"
+                      onClick={() => setReplyingTo(null)}
+                    >
+                      <svg className="icon" width="14" height="14">
+                        <use href="#close-x-icon" />
+                      </svg>
+                    </button>
                   </div>
                 )}
                 <form className="composer" onSubmit={handleSend}>
@@ -3577,6 +3752,155 @@ function App() {
           <img src={lightboxImage} alt="" className="lightbox-image" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
+
+      {msgContextMenu &&
+        (() => {
+          const m = activeMessages.find((mm) => mm.id === msgContextMenu.messageId);
+          if (!m) return null;
+          const mine = m.username === username;
+          const isMedia = m.type === "image" || m.type === "video" || m.type === "file";
+          return (
+            <>
+              <div className="msg-context-backdrop" onClick={() => setMsgContextMenu(null)} />
+              <div
+                className="msg-context-menu"
+                style={{ left: msgContextMenu.x, top: msgContextMenu.y }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    startSelectMode(m.id);
+                    setMsgContextMenu(null);
+                  }}
+                >
+                  <svg className="icon" width="15" height="15"><use href="#check-icon" /></svg>
+                  Select
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplyingTo(m);
+                    setMsgContextMenu(null);
+                  }}
+                >
+                  <svg className="icon" width="15" height="15"><use href="#reply-icon" /></svg>
+                  Reply
+                </button>
+                {m.text && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      copyMessageText(m);
+                      setMsgContextMenu(null);
+                    }}
+                  >
+                    <svg className="icon" width="15" height="15"><use href="#copy-icon" /></svg>
+                    Copy
+                  </button>
+                )}
+                {isMedia && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      saveMediaAs(m);
+                      setMsgContextMenu(null);
+                    }}
+                  >
+                    <svg className="icon" width="15" height="15"><use href="#download-icon" /></svg>
+                    Save as
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    openDeleteSheet([m.id]);
+                    setMsgContextMenu(null);
+                  }}
+                >
+                  <svg className="icon" width="15" height="15"><use href="#delete-trash-icon" /></svg>
+                  Delete
+                </button>
+              </div>
+            </>
+          );
+        })()}
+
+      {mediaGallery &&
+        (() => {
+          const item = mediaGallery.items[mediaGallery.index];
+          if (!item) return null;
+          const hasPrev = mediaGallery.index > 0;
+          const hasNext = mediaGallery.index < mediaGallery.items.length - 1;
+          const go = (delta) => {
+            setMediaGallery((prev) => {
+              if (!prev) return prev;
+              const nextIndex = prev.index + delta;
+              if (nextIndex < 0 || nextIndex >= prev.items.length) return prev;
+              return { ...prev, index: nextIndex };
+            });
+          };
+          return (
+            <div className="media-gallery-backdrop" onClick={() => setMediaGallery(null)}>
+              <button
+                type="button"
+                className="media-gallery-close"
+                onClick={() => setMediaGallery(null)}
+                aria-label="Close"
+              >
+                <svg className="icon" width="20" height="20"><use href="#close-icon" /></svg>
+              </button>
+              <button
+                type="button"
+                className="media-gallery-save"
+                title="Save as"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  saveMediaAs(item);
+                }}
+              >
+                <svg className="icon" width="18" height="18"><use href="#download-icon" /></svg>
+              </button>
+              {hasPrev && (
+                <button
+                  type="button"
+                  className="media-gallery-nav media-gallery-prev"
+                  aria-label="Previous"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    go(-1);
+                  }}
+                >
+                  ‹
+                </button>
+              )}
+              <div className="media-gallery-stage" onClick={(e) => e.stopPropagation()}>
+                {item.type === "image" ? (
+                  <img src={mediaSrc(item.mediaUrl)} alt="" className="media-gallery-media" />
+                ) : (
+                  <video src={mediaSrc(item.mediaUrl)} className="media-gallery-media" controls autoPlay />
+                )}
+                <div className="media-gallery-counter">
+                  {mediaGallery.index + 1} / {mediaGallery.items.length}
+                </div>
+              </div>
+              {hasNext && (
+                <button
+                  type="button"
+                  className="media-gallery-nav media-gallery-next"
+                  aria-label="Next"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    go(1);
+                  }}
+                >
+                  ›
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
       {showGroupInfo && activeConv?.type === "group" && (
         <GroupInfoPanel

@@ -6187,6 +6187,139 @@ label.modal-user-row {
   cursor: pointer;
 }
 
+/* ---------------- Message right-click / long-press context menu ---------------- */
+.msg-context-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1150;
+}
+.msg-context-menu {
+  position: fixed;
+  z-index: 1151;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+  padding: 6px;
+}
+.msg-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.msg-context-menu button:hover {
+  background: var(--surface-3);
+}
+.msg-context-menu button.danger {
+  color: var(--danger, #e04545);
+}
+
+/* ---------------- Full-screen media gallery (image/video viewer with slider) ---------------- */
+.media-gallery-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 24px;
+}
+.media-gallery-stage {
+  position: relative;
+  max-width: min(92vw, 900px);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.media-gallery-media {
+  max-width: 100%;
+  max-height: 82vh;
+  border-radius: 10px;
+  object-fit: contain;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.media-gallery-counter {
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.media-gallery-close,
+.media-gallery-save {
+  position: absolute;
+  top: 18px;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1;
+}
+.media-gallery-close {
+  right: 18px;
+}
+.media-gallery-save {
+  right: 66px;
+}
+.media-gallery-close:hover,
+.media-gallery-save:hover,
+.media-gallery-nav:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.media-gallery-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 26px;
+  line-height: 1;
+  z-index: 1;
+}
+.media-gallery-prev {
+  left: 18px;
+}
+.media-gallery-next {
+  right: 18px;
+}
+@media (max-width: 640px) {
+  .media-gallery-save {
+    right: 18px;
+    top: 66px;
+  }
+  .media-gallery-nav {
+    width: 38px;
+    height: 38px;
+    font-size: 22px;
+  }
+}
+
 /* ===== room avatar wrap / edit badge (chat header) ===== */
 .room-avatar-wrap {
   position: relative;

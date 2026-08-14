@@ -284,6 +284,38 @@ export default function IconSprite() {
         <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M5 5l14 14M19 5 5 19" />
       </symbol>
 
+      <symbol id="reply-icon" viewBox="0 0 24 24">
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M9 6 3 12l6 6M3 12h10a7 7 0 0 1 7 7v1"
+        />
+      </symbol>
+
+      <symbol id="copy-icon" viewBox="0 0 24 24">
+        <rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path
+          d="M15.5 8.5V6.5A2 2 0 0 0 13.5 4.5H6A2 2 0 0 0 4 6.5V14a2 2 0 0 0 2 2h2"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        />
+      </symbol>
+
+      <symbol id="download-icon" viewBox="0 0 24 24">
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"
+        />
+      </symbol>
+
       <symbol id="edit-pencil-icon" viewBox="0 0 24 24">
   <path
     fill="none"
