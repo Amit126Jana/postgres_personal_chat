@@ -146,6 +146,7 @@ function App() {
   const [pendingFiles, setPendingFiles] = useState([]); // [{ id, file, previewUrl, kind }] staged, not yet sent
   const [pendingPreview, setPendingPreview] = useState(null); // staged file currently shown large, or null
   const [mobileChatOpen, setMobileChatOpen] = useState(false); // narrow-screen nav: list vs conversation
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false); // narrow-screen bottom-tab "More" sheet
 
   // --- Multi-select / delete-for-me / clear chat / wallpapers ---
   // hiddenMsgIds, clearedAt, and wallpapers are all synced from the server (see the
@@ -2115,6 +2116,192 @@ function App() {
         </button>
       </nav>
 
+      <nav className="mobile-tabbar">
+        <button
+          type="button"
+          className={"tabbar-btn" + (activeView === "chats" && !mobileMoreOpen ? " active" : "")}
+          onClick={() => {
+            setMobileMoreOpen(false);
+            runOrConfirmLeaveSelect(() => setActiveView("chats"));
+          }}
+        >
+          <svg className="icon" width="21" height="21">
+            <use href="#chat-icon" />
+          </svg>
+          <span>Chats</span>
+        </button>
+        <button
+          type="button"
+          className={"tabbar-btn" + (activeView === "contacts" && !mobileMoreOpen ? " active" : "")}
+          onClick={() => {
+            setMobileMoreOpen(false);
+            runOrConfirmLeaveSelect(() => setActiveView("contacts"));
+          }}
+        >
+          <svg className="icon" width="21" height="21">
+            <use href="#contacts-icon" />
+          </svg>
+          <span>Friends</span>
+        </button>
+        <button
+          type="button"
+          className={"tabbar-btn" + (activeView === "groups" && !mobileMoreOpen ? " active" : "")}
+          onClick={() => {
+            setMobileMoreOpen(false);
+            runOrConfirmLeaveSelect(() => setActiveView("groups"));
+          }}
+        >
+          <svg className="icon" width="21" height="21">
+            <use href="#groups-icon" />
+          </svg>
+          <span>Groups</span>
+        </button>
+        <button
+          type="button"
+          className={"tabbar-btn" + (activeView === "notifications" && !mobileMoreOpen ? " active" : "")}
+          onClick={() => {
+            setMobileMoreOpen(false);
+            runOrConfirmLeaveSelect(() => setActiveView("notifications"));
+          }}
+        >
+          <span className="tabbar-icon-wrap">
+            <svg className="icon" width="21" height="21">
+              <use href="#info-icon" />
+            </svg>
+            {unreadNotifications > 0 && (
+              <span className="tabbar-badge">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>
+            )}
+          </span>
+          <span>Notifications</span>
+        </button>
+        {isAdmin ? (
+          <button
+            type="button"
+            className={"tabbar-btn" + (mobileMoreOpen ? " active" : "")}
+            onClick={() => setMobileMoreOpen((v) => !v)}
+          >
+            <span className="tabbar-icon-wrap">
+              <svg className="icon" width="21" height="21">
+                <use href="#more-icon" />
+              </svg>
+              {pendingRequestsCount > 0 && (
+                <span className="tabbar-badge">{pendingRequestsCount > 99 ? "99+" : pendingRequestsCount}</span>
+              )}
+            </span>
+            <span>More</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={"tabbar-btn" + (activeView === "profile" ? " active" : "")}
+            onClick={() => {
+              setMobileMoreOpen(false);
+              runOrConfirmLeaveSelect(() => setActiveView("profile"));
+            }}
+          >
+            <span className="tabbar-icon-wrap">
+              {avatarUrl ? (
+                <img className="tabbar-avatar" src={avatarUrl} alt="" />
+              ) : (
+                <svg className="icon" width="21" height="21">
+                  <use href="#profile-icon" />
+                </svg>
+              )}
+              {pendingRequestsCount > 0 && (
+                <span className="tabbar-badge">{pendingRequestsCount > 99 ? "99+" : pendingRequestsCount}</span>
+              )}
+            </span>
+            <span>Profile</span>
+          </button>
+        )}
+      </nav>
+
+      {mobileMoreOpen && (
+        <>
+          <div className="tabbar-more-backdrop" onClick={() => setMobileMoreOpen(false)} />
+          <div className="tabbar-more-sheet">
+            <button
+              type="button"
+              className="tabbar-more-item"
+              onClick={() => {
+                setMobileMoreOpen(false);
+                runOrConfirmLeaveSelect(() => setActiveView("profile"));
+              }}
+            >
+              <span className="tabbar-avatar-sm">
+                {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{initials(username)}</span>}
+              </span>
+              Profile
+            </button>
+            <button
+              type="button"
+              className="tabbar-more-item"
+              onClick={() => {
+                setMobileMoreOpen(false);
+                runOrConfirmLeaveSelect(() => setActiveView("requests"));
+              }}
+            >
+              <svg className="icon" width="18" height="18">
+                <use href="#contacts-icon" />
+              </svg>
+              Pending Requests
+              {pendingRequestsCount > 0 && <span className="rail-badge">{pendingRequestsCount}</span>}
+            </button>
+            <button
+              type="button"
+              className="tabbar-more-item"
+              onClick={() => {
+                setMobileMoreOpen(false);
+                runOrConfirmLeaveSelect(() => setActiveView("admin"));
+              }}
+            >
+              <svg className="icon" width="18" height="18">
+                <use href="#admin-icon" />
+              </svg>
+              Admin Panel
+            </button>
+            <button
+              type="button"
+              className="tabbar-more-item"
+              onClick={() => {
+                setMobileMoreOpen(false);
+                runOrConfirmLeaveSelect(() => setActiveView("settings"));
+              }}
+            >
+              <svg className="icon" width="18" height="18">
+                <use href="#settings-icon" />
+              </svg>
+              Settings
+            </button>
+            <button
+              type="button"
+              className="tabbar-more-item"
+              onClick={() => {
+                setDarkMode((v) => !v);
+              }}
+            >
+              <svg className="icon" width="18" height="18">
+                <use href={darkMode ? "#sun-icon" : "#moon-icon"} />
+              </svg>
+              {darkMode ? "Light mode" : "Dark mode"}
+            </button>
+            <button
+              type="button"
+              className="tabbar-more-item danger"
+              onClick={() => {
+                setMobileMoreOpen(false);
+                logout();
+              }}
+            >
+              <svg className="icon" width="18" height="18">
+                <use href="#logout-icon" />
+              </svg>
+              Log out
+            </button>
+          </div>
+        </>
+      )}
+
       {activeView === "settings" ? (
         <SettingsPanel
           profile={{
@@ -2179,6 +2366,7 @@ function App() {
           mediaSrc={mediaSrc}
           onClose={() => setActiveView("chats")}
           onOpenRequests={() => setActiveView("requests")}
+          onOpenSettings={() => runOrConfirmLeaveSelect(() => setActiveView("settings"))}
           onUnreadChange={setUnreadNotifications}
         />
       ) : activeView === "requests" ? (

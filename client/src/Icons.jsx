@@ -364,6 +364,32 @@ export default function IconSprite() {
         <circle cx="8.5" cy="13" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.5" />
         <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="m17.5 6 2.5 2.5-2.5 2.5M17.5 18l-2.5-2.5 2.5-2.5" />
       </symbol>
+
+      <symbol id="filter-icon" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M4 5.5h16L14 13v6l-4 2v-8L4 5.5Z" />
+      </symbol>
+
+      <symbol id="mention-icon" viewBox="0 0 24 24">
+        <circle cx="12" cy="12.5" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M15.6 12.3v.9a2.3 2.3 0 0 0 4.6 0V12a8.2 8.2 0 1 0-3.4 6.6" />
+      </symbol>
+
+      <symbol id="trophy-icon" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M7 4.5h10v4.2a5 5 0 0 1-10 0V4.5Z" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M7 6H4.5v1.5A3 3 0 0 0 7.5 10.5M17 6h2.5v1.5A3 3 0 0 1 16.5 10.5" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M12 13.5v3M9 19.5h6M9.5 19.5l.6-3M14.5 19.5l-.6-3" />
+      </symbol>
+
+      <symbol id="megaphone-icon" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M4 10.5v3a1.5 1.5 0 0 0 1.5 1.5H7l2.5 4V6.5L7 10.5H5.5A1.5 1.5 0 0 0 4 10.5Z" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M12 8.2c2.6.3 4.6 1.6 6.3 3.8-1.7 2.2-3.7 3.5-6.3 3.8" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M9 16v3a1.3 1.3 0 0 0 2.6 0v-2.3" />
+      </symbol>
+
+      <symbol id="check-icon" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" d="m8 12.3 2.6 2.6L16.2 9" />
+      </symbol>
     </svg>
   );
 }
