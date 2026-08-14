@@ -576,25 +576,25 @@ textarea {
 /* ---- Notifications & Pending Requests — card redesign ---- */
 .notifications-panel,
 .pending-requests-panel {
-  background: var(--surface-2, #f4f5f7);
-  padding: 24px;
-  align-items: center;
+  background: var(--surface, #fff);
+  padding: 0;
+  align-items: stretch;
 }
 .page-panel-card {
   width: 100%;
-  max-width: 720px;
-  background: var(--surface, #fff);
-  border-radius: 18px;
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.06));
-  box-shadow: 0 8px 28px rgba(20, 20, 40, 0.06);
-  overflow: hidden;
+  max-width: none;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  overflow: visible;
   display: flex;
   flex-direction: column;
 }
 .notifications-panel .page-panel-head,
 .pending-requests-panel .page-panel-head {
-  padding: 22px 24px 16px;
-  border-bottom: none;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   align-items: flex-start;
 }
 .page-panel-head-title h2 {
@@ -5058,8 +5058,18 @@ label.modal-user-row {
   }
   .notif-tabs {
     position: relative;
+    padding: 0 16px 14px;
     mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+  }
+  .notif-tab {
+    font-size: 12px;
+    padding: 7px 11px;
+    gap: 4px;
+  }
+  .notif-tab .icon {
+    width: 12px;
+    height: 12px;
   }
   .pending-requests-panel .request-row {
     flex-wrap: wrap;
