@@ -133,6 +133,7 @@ function App() {
   const [draft, setDraft] = useState("");
   const [typingByConv, setTypingByConv] = useState({}); // conversationId -> username | null
   const [showComposerEmoji, setShowComposerEmoji] = useState(false);
+  const [showAttachPanel, setShowAttachPanel] = useState(false);
   const [openReactionPickerFor, setOpenReactionPickerFor] = useState(null);
   const [openMsgMenuFor, setOpenMsgMenuFor] = useState(null);
   const [infoPanelMsgId, setInfoPanelMsgId] = useState(null);
@@ -219,6 +220,8 @@ function App() {
   const remoteDescSetRef = useRef(false);
   const videoDeviceIdRef = useRef(null); // deviceId of the camera currently in use (for "switch camera")
   const fileInputRef = useRef(null);
+  const attachPanelRef = useRef(null);
+  const attachTextInputRef = useRef(null);
   const activeConvIdRef = useRef(null);
   const usernameRef = useRef("");
   const conversationsRef = useRef([]);
@@ -245,6 +248,25 @@ function App() {
       });
     }
   }, [activeConvId]);
+
+  // Close the attach panel on outside click or Escape.
+  useEffect(() => {
+    if (!showAttachPanel) return;
+    function handlePointerDown(e) {
+      if (attachPanelRef.current && !attachPanelRef.current.contains(e.target)) {
+        setShowAttachPanel(false);
+      }
+    }
+    function handleKeyDown(e) {
+      if (e.key === "Escape") setShowAttachPanel(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showAttachPanel]);
 
   // Don't let staged-but-unsent attachments follow the user into a different chat.
   useEffect(() => {
@@ -1563,6 +1585,14 @@ function App() {
     e.target.value = "";
     if (!file) return;
     stageFiles([file]);
+  }
+
+  // Opens the hidden file input filtered to a specific kind, driven by the attach panel.
+  function openFilePicker(accept) {
+    setShowAttachPanel(false);
+    if (!fileInputRef.current) return;
+    fileInputRef.current.accept = accept;
+    fileInputRef.current.click();
   }
 
   // Pasting an image/video/audio/file (e.g. Ctrl+V after copying an image) stages it
@@ -3487,6 +3517,108 @@ function App() {
                     </button>
                   </div>
                 )}
+                {showAttachPanel && (
+                  <div className="attach-panel" ref={attachPanelRef}>
+                    <div className="attach-panel-grid">
+                      <button
+                        type="button"
+                        className="attach-panel-item"
+                        onClick={() => {
+                          setShowAttachPanel(false);
+                          attachTextInputRef.current?.focus();
+                        }}
+                      >
+                        <span className="attach-panel-icon attach-panel-icon-text">Aa</span>
+                        <span className="attach-panel-label">Text</span>
+                        <span className="attach-panel-sub">Send text</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="attach-panel-item"
+                        onClick={() => openFilePicker("image/*")}
+                      >
+                        <span className="attach-panel-icon attach-panel-icon-image">
+                          <svg className="icon" width="22" height="22">
+                            <use href="#image-icon" />
+                          </svg>
+                        </span>
+                        <span className="attach-panel-label">Image</span>
+                        <span className="attach-panel-sub">Send photo</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="attach-panel-item"
+                        onClick={() => openFilePicker("video/*")}
+                      >
+                        <span className="attach-panel-icon attach-panel-icon-video">
+                          <svg className="icon" width="22" height="22">
+                            <use href="#video-call-icon" />
+                          </svg>
+                        </span>
+                        <span className="attach-panel-label">Video</span>
+                        <span className="attach-panel-sub">Send video</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="attach-panel-item"
+                        onClick={() => openFilePicker("*/*")}
+                      >
+                        <span className="attach-panel-icon attach-panel-icon-file">
+                          <svg className="icon" width="20" height="20">
+                            <use href="#paperclip-small-icon" />
+                          </svg>
+                        </span>
+                        <span className="attach-panel-label">File</span>
+                        <span className="attach-panel-sub">Send file</span>
+                      </button>
+                      <span className="attach-panel-divider" aria-hidden="true" />
+                      <button
+                        type="button"
+                        className="attach-panel-item"
+                        onClick={() => openFilePicker("audio/*")}
+                      >
+                        <span className="attach-panel-icon attach-panel-icon-voice">
+                          <svg className="icon" width="20" height="20">
+                            <use href="#mic-icon" />
+                          </svg>
+                        </span>
+                        <span className="attach-panel-label">Voice</span>
+                        <span className="attach-panel-sub">Record voice</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="attach-panel-item"
+                        onClick={() => {
+                          setShowAttachPanel(false);
+                          runOrConfirmLeaveSelect(() => setActiveView("contacts"));
+                        }}
+                      >
+                        <span className="attach-panel-icon attach-panel-icon-contact">
+                          <svg className="icon" width="20" height="20">
+                            <use href="#contacts-icon" />
+                          </svg>
+                        </span>
+                        <span className="attach-panel-label">Contact</span>
+                        <span className="attach-panel-sub">Share contact</span>
+                      </button>
+                    </div>
+                    <div
+                      className={"attach-panel-dropzone" + (isDraggingFile ? " is-drag-active" : "")}
+                      onDragOver={handleFeedDragOver}
+                      onDragLeave={handleFeedDragLeave}
+                      onDrop={(e) => {
+                        handleFeedDrop(e);
+                        setShowAttachPanel(false);
+                      }}
+                    >
+                      <svg className="icon attach-panel-dropzone-icon" width="26" height="26">
+                        <use href="#download-icon" />
+                      </svg>
+                      <div className="attach-panel-dropzone-title">Drag &amp; drop files here</div>
+                      <div className="attach-panel-dropzone-sub">Max file size 50MB</div>
+                    </div>
+                  </div>
+                )}
                 <form className="composer" onSubmit={handleSend}>
                   <div className="composer-emoji-wrap">
                     <button
@@ -3516,24 +3648,30 @@ function App() {
                   />
                   <button
                     type="button"
-                    className="attach-btn"
-                    title="Share image, video, or audio"
+                    className={"attach-btn" + (showAttachPanel ? " is-active" : "")}
+                    title="Attach"
                     disabled={uploading}
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => setShowAttachPanel((v) => !v)}
                   >
                     {uploading ? (
                       "…"
                     ) : (
-                      <svg className="icon" width="20" height="20">
+                      <svg
+                        className={"icon attach-btn-icon" + (showAttachPanel ? " is-rotated" : "")}
+                        width="20"
+                        height="20"
+                      >
                         <use href="#plus-icon" />
                       </svg>
                     )}
                   </button>
                   <input
-                    placeholder="send a line…"
+                    ref={attachTextInputRef}
+                    placeholder="Send a message…"
                     value={draft}
                     onChange={handleDraftChange}
                     onPaste={handleComposerPaste}
+                    onFocus={() => setShowAttachPanel(false)}
                     maxLength={2000}
                   />
                   <button
