@@ -1982,46 +1982,6 @@ function App() {
           </svg>
           <span className="rail-label">Groups</span>
         </button>
-        <button
-          type="button"
-          className="rail-btn"
-          title="Games"
-          onClick={() =>
-            runOrConfirmLeaveSelect(() => {
-              if (activeConv) {
-                setActiveView("chats");
-                setShowGamesMenu(true);
-              } else {
-                setActiveView("chats");
-              }
-            })
-          }
-        >
-          <svg className="icon" width="20" height="20">
-            <use href="#video-call-icon" />
-          </svg>
-          <span className="rail-label">Games</span>
-        </button>
-        <button
-          type="button"
-          className="rail-btn"
-          title="Polls"
-          onClick={() =>
-            runOrConfirmLeaveSelect(() => {
-              if (activeConv) {
-                setActiveView("chats");
-                setShowPollComposer(true);
-              } else {
-                setActiveView("chats");
-              }
-            })
-          }
-        >
-          <svg className="icon" width="20" height="20">
-            <use href="#info-icon" />
-          </svg>
-          <span className="rail-label">Polls</span>
-        </button>
         {isAdmin && (
           <button
             type="button"
