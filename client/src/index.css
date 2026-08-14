@@ -5044,7 +5044,7 @@ label.modal-user-row {
   .notifications-panel .mobile-back-btn,
   .pending-requests-panel .mobile-back-btn {
     display: inline-flex;
-    padding: 16px 4px 0 16px;
+    padding: 18px 4px 6px 16px;
     font-size: 20px;
   }
   .page-panel-card {
@@ -5057,10 +5057,9 @@ label.modal-user-row {
     display: none;
   }
   .notif-tabs {
-    position: relative;
+    flex-wrap: wrap;
+    overflow-x: visible;
     padding: 0 16px 14px;
-    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
   }
   .notif-tab {
     font-size: 12px;
