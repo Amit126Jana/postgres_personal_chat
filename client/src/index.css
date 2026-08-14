@@ -761,11 +761,13 @@ textarea {
   right: -3px;
   min-width: 16px;
   height: 16px;
+  padding: 0 4px;
   border-radius: 999px;
   background: #22c55e;
   color: #fff;
   font-size: 10px;
   font-weight: 700;
+  line-height: 16px;
   text-align: center;
   border: 2px solid var(--surface-1, #fff);
   box-sizing: content-box;
@@ -808,6 +810,13 @@ textarea {
   padding: 2px 7px;
   border-radius: 20px;
   flex-shrink: 0;
+}
+.group-online-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #22c55e;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .unread-badge {
   min-width: 20px;

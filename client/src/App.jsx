@@ -787,6 +787,7 @@ function App() {
             ? {
                 ...c,
                 lastMessage: {
+                  id: msg.id,
                   type: msg.type,
                   text: msg.text,
                   mediaName: msg.mediaName,
@@ -825,6 +826,26 @@ function App() {
           ),
         };
       });
+
+      // If this is the roster preview's current message (e.g. a call log going from
+      // "Calling…" to "No answer", or a game/poll status changing), refresh the
+      // preview too — otherwise the chat list keeps showing the stale text until
+      // the next full reload, even though the message itself is correct.
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === msg.conversationId && c.lastMessage?.id === msg.id
+            ? {
+                ...c,
+                lastMessage: {
+                  ...c.lastMessage,
+                  type: msg.type,
+                  text: msg.text,
+                  mediaName: msg.mediaName,
+                },
+              }
+            : c,
+        ),
+      );
     });
 
     socket.on("messages:seen", ({ conversationId, messageIds }) => {
@@ -2206,17 +2227,6 @@ function App() {
                       (c.members || []).some((m) => m.id !== userId && m.online) && (
                         <span className="online-dot" title="Online" />
                       )}
-                    {c.type === "group" &&
-                      (() => {
-                        const onlineCount = (c.members || []).filter(
-                          (m) => m.id !== userId && m.online,
-                        ).length;
-                        return onlineCount > 0 ? (
-                          <span className="online-count-badge" title={`${onlineCount} online`}>
-                            {onlineCount}
-                          </span>
-                        ) : null;
-                      })()}
                   </span>
                   <span className="roster-text-col">
                     <span className="roster-name">
@@ -2224,6 +2234,14 @@ function App() {
                       {c.type === "group" && (
                         <span className="conv-badge">group</span>
                       )}
+                      {c.type === "group" &&
+                        (() => {
+                          // Count every member currently online, including yourself.
+                          const onlineCount = (c.members || []).filter((m) => m.online).length;
+                          return onlineCount > 0 ? (
+                            <span className="group-online-label">{onlineCount} online</span>
+                          ) : null;
+                        })()}
                     </span>
                     <span className="roster-preview">
                       {c.lastReaction &&
