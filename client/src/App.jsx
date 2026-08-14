@@ -2000,6 +2000,46 @@ function App() {
     <div className={"app" + (mobileChatOpen ? " mobile-chat-open" : "")}>
       <IconSprite />
 
+      {!mobileChatOpen && (
+        <div className="mobile-topbar">
+          <button
+            type="button"
+            className="mobile-topbar-menu-btn"
+            title="Menu"
+            onClick={() => setMobileMoreOpen(true)}
+          >
+            <svg className="icon" width="20" height="20">
+              <use href="#menu-icon" />
+            </svg>
+          </button>
+          <div className="mobile-topbar-brand">
+            <img
+              src={darkMode ? "/logo-dark.png" : "/logo-light.png"}
+              alt=""
+              className="mobile-topbar-logo"
+            />
+            <span className="mobile-topbar-word">
+              Make<span className="mobile-topbar-word-accent">Friends</span>
+            </span>
+          </div>
+          {activeView === "chats" && (
+            <button
+              type="button"
+              className="mobile-topbar-compose-btn"
+              title="New chat or group"
+              onClick={() => {
+                setNewChatMode("direct");
+                setShowNewChat(true);
+              }}
+            >
+              <svg className="icon" width="17" height="17">
+                <use href="#edit-pencil-icon" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
       <nav className="icon-rail">
         <div className="rail-brand-row">
           <div className="rail-brand">
@@ -2393,26 +2433,6 @@ function App() {
         <>
           <aside className="sidebar">
             <div className="sidebar-header">
-              <button
-                type="button"
-                className="sidebar-menu-btn"
-                title="Menu"
-                onClick={() => setMobileMoreOpen(true)}
-              >
-                <svg className="icon" width="20" height="20">
-                  <use href="#menu-icon" />
-                </svg>
-              </button>
-              <div className="sidebar-brand">
-                <img
-                  src={darkMode ? "/logo-dark.png" : "/logo-light.png"}
-                  alt=""
-                  className="sidebar-brand-logo"
-                />
-                <span className="sidebar-brand-word">
-                  Make<span className="sidebar-brand-word-accent">Friends</span>
-                </span>
-              </div>
               <h1 className="sidebar-title">Chats</h1>
               <button
                 type="button"
