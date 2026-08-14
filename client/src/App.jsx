@@ -3482,7 +3482,7 @@ function App() {
                       onClick={() => setReplyingTo(null)}
                     >
                       <svg className="icon" width="14" height="14">
-                        <use href="#close-x-icon" />
+                        <use href="#close-icon" />
                       </svg>
                     </button>
                   </div>
