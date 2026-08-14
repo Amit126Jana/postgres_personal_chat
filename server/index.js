@@ -8,7 +8,7 @@ import { v2 as cloudinary } from "cloudinary";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Server } from "socket.io";
-import { verifyOtpIdToken } from "./firebaseAdmin.js";
+import { sendOtp, checkOtp } from "./twilioVerify.js";
 import {
   initDb,
   createUser,
@@ -251,27 +251,46 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// --- Auth: OTP (Firebase phone auth) — one endpoint for both register and login ---
-// The client verifies the OTP with Firebase itself and sends up the resulting ID
-// token; we only need to confirm that token is genuine and pull the verified phone
-// number out of it. If no account exists yet for that number, `username` must be
-// supplied (the client asks for a name after a first-time OTP verification) and we
-// create the account; otherwise this behaves like a normal login.
-app.post("/api/auth/otp", async (req, res) => {
+// --- Auth: OTP (Twilio Verify) — send step ---
+// Kicks off an SMS OTP to the given phone number. No account is created here;
+// that happens in /api/auth/otp/verify once the code is confirmed.
+app.post("/api/auth/otp/send", async (req, res) => {
   try {
-    const { idToken, username } = req.body || {};
-    if (!idToken) return res.status(400).json({ error: "Missing verification token." });
+    let { phoneNumber } = req.body || {};
+    if (!phoneNumber) return res.status(400).json({ error: "Missing phone number." });
+    phoneNumber = phoneNumber.trim().replace(/[\s-]/g, "");
+    if (!/^\+[1-9]\d{6,14}$/.test(phoneNumber)) {
+      return res.status(400).json({ error: "Enter a valid phone number in international format, e.g. +919876543210." });
+    }
+    await sendOtp(phoneNumber);
+    res.json({ sent: true });
+  } catch (err) {
+    console.error("OTP send failed:", err.message);
+    res.status(500).json({ error: "Could not send the OTP. Please try again." });
+  }
+});
 
-    let phone;
+// --- Auth: OTP (Twilio Verify) — verify step, then register or login ---
+// Checks the code against Twilio. If no account exists yet for that number,
+// `username` must be supplied (the client asks for a name after a first-time OTP
+// verification) and we create the account; otherwise this behaves like a normal login.
+app.post("/api/auth/otp/verify", async (req, res) => {
+  try {
+    let { phoneNumber, code, username } = req.body || {};
+    if (!phoneNumber || !code) return res.status(400).json({ error: "Missing phone number or code." });
+    phoneNumber = phoneNumber.trim().replace(/[\s-]/g, "");
+
+    let approved;
     try {
-      phone = await verifyOtpIdToken(idToken);
+      approved = await checkOtp(phoneNumber, code.trim());
     } catch (err) {
-      console.error("OTP token verification failed:", err.message);
+      console.error("OTP check failed:", err.message);
       return res.status(401).json({ error: "Could not verify that OTP session. Please try again." });
     }
-    // Firebase phone numbers are E.164 (e.g. "+919876543210"); normalize the same way
-    // the password-auth routes do so both flows land on the same account.
-    phone = phone.trim().replace(/[\s-]/g, "");
+    if (!approved) {
+      return res.status(401).json({ error: "Incorrect or expired code. Please try again." });
+    }
+    const phone = phoneNumber;
 
     const existing = await getUserWithPasswordByPhone(phone);
 

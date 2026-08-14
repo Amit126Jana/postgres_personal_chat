@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
-import { firebaseAuth } from "./firebase.js";
 
 const PHONE_REGEX = /^\+?[1-9]\d{9,14}$/;
 const NAME_REGEX = /^[A-Za-z\s.'-]+$/;
@@ -90,20 +88,9 @@ export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
   const [otpCode, setOtpCode] = useState("");
   const [otpName, setOtpName] = useState("");
   const [rememberDevice, setRememberDevice] = useState(true);
-  const confirmationRef = useRef(null);
-  const idTokenRef = useRef(null);
-  const recaptchaRef = useRef(null);
 
   const trusted = useOtp ? readTrustedSession() : null;
   const trustedMatchesTyped = trusted && toE164(phoneNumber || trusted.phone) === trusted.phone;
-
-  useEffect(() => {
-    // Cleanup any in-flight reCAPTCHA widget when the OTP panel unmounts/toggles off.
-    return () => {
-      recaptchaRef.current?.clear?.();
-      recaptchaRef.current = null;
-    };
-  }, [useOtp]);
 
   useEffect(() => {
     // Pre-fill the phone field with a still-trusted number so "skip OTP" works
@@ -119,10 +106,6 @@ export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
     setOtpStep("phone");
     setOtpCode("");
     setOtpName("");
-    confirmationRef.current = null;
-    idTokenRef.current = null;
-    recaptchaRef.current?.clear?.();
-    recaptchaRef.current = null;
   }
 
   function toggleOtp(next) {
@@ -147,25 +130,20 @@ export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
 
     setSubmitting(true);
     try {
-      if (!recaptchaRef.current) {
-        recaptchaRef.current = new RecaptchaVerifier(firebaseAuth, "recaptcha-container", {
-          size: "invisible",
-        });
+      const res = await fetch(`${serverUrl}/api/auth/otp/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: toE164(phoneNumber) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not send the OTP. Please try again.");
+        return;
       }
-      const confirmation = await signInWithPhoneNumber(
-        firebaseAuth,
-        toE164(phoneNumber),
-        recaptchaRef.current,
-      );
-      confirmationRef.current = confirmation;
       setOtpStep("code");
     } catch (err) {
       console.error("Send OTP failed", err);
-      setError(err.message?.includes("invalid-phone-number")
-        ? "That doesn't look like a valid phone number."
-        : "Could not send the OTP. Please try again.");
-      recaptchaRef.current?.clear?.();
-      recaptchaRef.current = null;
+      setError("Could not reach the server. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
@@ -178,14 +156,10 @@ export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
 
     setSubmitting(true);
     try {
-      const credential = await confirmationRef.current.confirm(otpCode.trim());
-      const idToken = await credential.user.getIdToken();
-      idTokenRef.current = idToken;
-
-      const res = await fetch(`${serverUrl}/api/auth/otp`, {
+      const res = await fetch(`${serverUrl}/api/auth/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
+        body: JSON.stringify({ phoneNumber: toE164(phoneNumber), code: otpCode.trim() }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -215,10 +189,10 @@ export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${serverUrl}/api/auth/otp`, {
+      const res = await fetch(`${serverUrl}/api/auth/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken: idTokenRef.current, username: otpName.trim() }),
+        body: JSON.stringify({ phoneNumber: toE164(phoneNumber), code: otpCode.trim(), username: otpName.trim() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -488,7 +462,6 @@ export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
         )}
 
         {/* Invisible reCAPTCHA anchor for Firebase phone auth — renders nothing visible. */}
-        <div id="recaptcha-container" />
 
         {error && <div className="gate-error">{error}</div>}
 

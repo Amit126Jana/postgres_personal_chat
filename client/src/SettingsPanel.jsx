@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 
 export const THEME_COLORS = [
+  { id: "green", hex: "#22c55e" },
   { id: "pink", hex: "#ec4899" },
   { id: "blue", hex: "#38bdf8" },
-  { id: "green", hex: "#22c55e" },
   { id: "orange", hex: "#f97316" },
   { id: "violet", hex: "#a855f7" },
 ];

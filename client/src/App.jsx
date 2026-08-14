@@ -20,7 +20,6 @@ import PollComposer from "./PollComposer.jsx";
 import PollCard from "./PollCard.jsx";
 import GameHistory from "./GameHistory.jsx";
 import AdminPage from "./AdminPage.jsx";
-import { firebaseAuth } from "./firebase.js";
 import { Client as BeamsClient, TokenProvider as BeamsTokenProvider } from "@pusher/push-notifications-web";
 
 const SERVER_URL =
@@ -83,12 +82,12 @@ function App() {
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [coverUrl, setCoverUrl] = useState(null);
   const [tagline, setTagline] = useState("");
-  const [themeColor, setThemeColor] = useState("violet");
+  const [themeColor, setThemeColor] = useState("green");
   const [showOnline, setShowOnline] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeView, setActiveView] = useState("chats"); // "chats" | "profile" | "groups" | "contacts" | "settings"
   const [darkMode, setDarkMode] = useState(
-    () => localStorage.getItem("mf_theme_mode") !== "light",
+    () => localStorage.getItem("mf_theme_mode") === "dark",
   );
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [gamesPlayedCount, setGamesPlayedCount] = useState(0);
@@ -1575,7 +1574,6 @@ function App() {
     localStorage.removeItem("mf_token");
     teardownCall();
     socket.disconnect();
-    firebaseAuth.signOut().catch(() => {});
     if (beamsClientRef.current) {
       beamsClientRef.current.stop().catch(() => {});
       beamsClientRef.current = null;

@@ -40,7 +40,7 @@ export async function initDb() {
       password_hash VARCHAR(255) NULL,
       avatar_url VARCHAR(500) NULL,
       tagline VARCHAR(140) NULL,
-      theme_color VARCHAR(60) NOT NULL DEFAULT 'blue',
+      theme_color VARCHAR(60) NOT NULL DEFAULT 'green',
       show_online SMALLINT NOT NULL DEFAULT 1,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -289,7 +289,7 @@ function toPublicUser(row) {
     avatarUrl: row.avatar_url ?? row.avatarUrl ?? null,
     coverUrl: row.cover_url ?? row.coverUrl ?? null,
     tagline: row.tagline ?? null,
-    themeColor: row.theme_color ?? row.themeColor ?? "violet",
+    themeColor: row.theme_color ?? row.themeColor ?? "green",
     showOnline: !!(row.show_online ?? row.showOnline),
   };
 }
@@ -313,7 +313,7 @@ export async function createUser(phoneNumber, username, passwordHash) {
     username,
     avatar_url: null,
     tagline: null,
-    theme_color: "violet",
+    theme_color: "green",
     show_online: 1,
   });
 }
