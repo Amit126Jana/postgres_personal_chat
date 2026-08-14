@@ -40,7 +40,7 @@ export async function initDb() {
       password_hash VARCHAR(255) NULL,
       avatar_url VARCHAR(500) NULL,
       tagline VARCHAR(140) NULL,
-      theme_color VARCHAR(60) NOT NULL DEFAULT 'green',
+      theme_color VARCHAR(60) NOT NULL DEFAULT '#783fee',
       show_online SMALLINT NOT NULL DEFAULT 1,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -55,7 +55,7 @@ export async function initDb() {
   // The column DEFAULT only takes effect on brand-new tables (CREATE TABLE IF NOT
   // EXISTS is a no-op once the table already exists). Fix the default on already-
   // deployed databases too, so it actually matches what new signups should get.
-  await query(`ALTER TABLE users ALTER COLUMN theme_color SET DEFAULT 'green'`);
+  await query(`ALTER TABLE users ALTER COLUMN theme_color SET DEFAULT '#783fee'`);
 
   // Optional profile cover/banner image shown behind the avatar on the Settings page.
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_url VARCHAR(500) NULL`);
@@ -294,7 +294,7 @@ function toPublicUser(row) {
     avatarUrl: row.avatar_url ?? row.avatarUrl ?? null,
     coverUrl: row.cover_url ?? row.coverUrl ?? null,
     tagline: row.tagline ?? null,
-    themeColor: row.theme_color ?? row.themeColor ?? "green",
+    themeColor: row.theme_color ?? row.themeColor ?? "#783fee",
     showOnline: !!(row.show_online ?? row.showOnline),
   };
 }
@@ -310,7 +310,7 @@ export async function createUser(phoneNumber, username, passwordHash) {
 
   const [rows] = await query(
     "INSERT INTO users (phone_number, username, password_hash, theme_color) VALUES (?, ?, ?, ?) RETURNING id",
-    [phoneNumber, username, passwordHash, "green"]
+    [phoneNumber, username, passwordHash, "#783fee"]
   );
   return toPublicUser({
     id: rows[0].id,
@@ -318,7 +318,7 @@ export async function createUser(phoneNumber, username, passwordHash) {
     username,
     avatar_url: null,
     tagline: null,
-    theme_color: "green",
+    theme_color: "#783fee",
     show_online: 1,
   });
 }

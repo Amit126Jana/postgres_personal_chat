@@ -82,7 +82,7 @@ function App() {
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [coverUrl, setCoverUrl] = useState(null);
   const [tagline, setTagline] = useState("");
-  const [themeColor, setThemeColor] = useState("green");
+  const [themeColor, setThemeColor] = useState("#783fee");
   const [showOnline, setShowOnline] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeView, setActiveView] = useState("chats"); // "chats" | "profile" | "groups" | "contacts" | "settings"

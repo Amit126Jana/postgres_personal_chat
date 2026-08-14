@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 export const THEME_COLORS = [
+  { id: "indigo", hex: "#783fee" },
   { id: "green", hex: "#22c55e" },
   { id: "pink", hex: "#ec4899" },
   { id: "blue", hex: "#38bdf8" },
