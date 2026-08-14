@@ -741,7 +741,8 @@ textarea {
 }
 .conv-avatar-wrap {
   position: relative;
-  overflow: visible;
+  display: inline-flex;
+  flex-shrink: 0;
 }
 .online-dot {
   position: absolute;

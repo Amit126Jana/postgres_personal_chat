@@ -2192,14 +2192,16 @@ function App() {
                     });
                   }}
                 >
-                  <span className="avatar conv-avatar-wrap">
-                    {c.avatarUrl ? (
-                      <img src={mediaSrc(c.avatarUrl)} alt="" />
-                    ) : c.type === "group" ? (
-                      "👥"
-                    ) : (
-                      initials(c.name)
-                    )}
+                  <span className="conv-avatar-wrap">
+                    <span className="avatar">
+                      {c.avatarUrl ? (
+                        <img src={mediaSrc(c.avatarUrl)} alt="" />
+                      ) : c.type === "group" ? (
+                        "👥"
+                      ) : (
+                        initials(c.name)
+                      )}
+                    </span>
                     {c.type !== "group" &&
                       (c.members || []).some((m) => m.id !== userId && m.online) && (
                         <span className="online-dot" title="Online" />
