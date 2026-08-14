@@ -63,6 +63,10 @@ import {
   removeConversationMember,
   setConversationRole,
   getConversationRole,
+  createCallLog,
+  updateCallLog,
+  getCallLogByMessageId,
+  callLogText,
 } from "./db.js";
 import { GAME_TYPES, createInitialState, applyMove, sanitizeStateForClient, PER_PLAYER_GAMES } from "./games.js";
 import { recordGameResult, getGameHistory } from "./db.js";
@@ -588,6 +592,11 @@ const io = new Server(server, {
 // is persisted in PostgreSQL via db.js — this map is just live socket presence.
 const onlineUsers = new Map(); // socket.id -> { userId, socketId, username, phoneNumber }
 const userSockets = new Map(); // userId -> Set(socket.id)  (a user may have multiple tabs)
+// Tracks in-flight 1:1 calls so we can log them as chat messages and auto-expire
+// unanswered ones. Keyed by the client-generated callId.
+// { conversationId, messageId, callerId, calleeId, timeoutHandle }
+const activeCalls = new Map();
+const CALL_NO_ANSWER_MS = 30_000; // matches the 0s Calling / 10s / 20s Ringing / 30s No answer flow on the client
 
 // If any other member of the conversation is currently connected (any tab/socket),
 // the message has already reached their client in real time via the room broadcast —
@@ -607,6 +616,76 @@ async function deliverIfRecipientOnline(conversationId, senderId, message) {
     return message;
   }
 }
+
+// Creates the chat-log message for a freshly-placed 1:1 call and starts the
+// server-side "no answer after 30s" timer. Broadcasts the new message to the
+// conversation room exactly like any other message (see the `poll:create`/game
+// handlers above for the same pattern), so it shows up instantly in the chat and
+// in the chat-list preview for both people.
+async function startCallLog({ conversationId, callId, callerId, calleeId, callType }) {
+  const saved = await addMessage({
+    conversationId,
+    userId: callerId,
+    type: "call",
+    text: callLogText({ callType, status: "ringing" }),
+  });
+  await createCallLog({ conversationId, messageId: saved.id, callerId, callType });
+  const delivered = await deliverIfRecipientOnline(conversationId, callerId, saved);
+  io.to(convRoom(conversationId)).emit("message", { ...delivered, reactions: {} });
+
+  const timeoutHandle = setTimeout(async () => {
+    await finishCallLog(callId, "no_answer");
+    // Tell both sides the call is over so the UI drops out of "Ringing" on its own,
+    // even if the callee's client never sent an explicit decline. callerId/calleeId
+    // here are always persistent userIds, so just resolve via userSockets.
+    const targets = [...(userSockets.get(callerId) || []), ...(userSockets.get(calleeId) || [])];
+    targets.forEach((sid) => io.to(sid).emit("call:end", { fromId: "server", callId, reason: "no_answer" }));
+  }, CALL_NO_ANSWER_MS);
+
+  activeCalls.set(callId, { conversationId, messageId: saved.id, callerId, calleeId, callType, timeoutHandle });
+}
+
+// Moves a call to "connected" once the callee accepts. Clears the no-answer timer
+// since the call is now live.
+async function connectCallLog(callId) {
+  const call = activeCalls.get(callId);
+  if (!call) return;
+  clearTimeout(call.timeoutHandle);
+  call.timeoutHandle = null;
+  call.connectedAt = new Date();
+  await updateCallLog(call.messageId, { status: "connected", connectedAt: call.connectedAt });
+  const text = callLogText({ callType: call.callType, status: "connected" });
+  const msg = await updateMessageText(call.messageId, text);
+  io.to(convRoom(call.conversationId)).emit("message:update", msg);
+}
+
+// Ends a call and records its final state:
+//  - "completed": was connected, now has a real duration
+//  - "declined": callee explicitly rejected before answering
+//  - "no_answer": timer expired, or caller hung up before it was ever answered
+async function finishCallLog(callId, explicitStatus) {
+  const call = activeCalls.get(callId);
+  if (!call) return;
+  if (call.timeoutHandle) clearTimeout(call.timeoutHandle);
+  activeCalls.delete(callId);
+
+  let status = explicitStatus;
+  let durationSeconds;
+  if (!status) status = call.connectedAt ? "completed" : "no_answer";
+  if (call.connectedAt && status !== "declined" && status !== "no_answer") {
+    status = "completed";
+    durationSeconds = Math.max(0, Math.round((Date.now() - call.connectedAt.getTime()) / 1000));
+  }
+
+  await updateCallLog(call.messageId, {
+    status,
+    endedAt: new Date(),
+    durationSeconds: durationSeconds ?? null,
+  });
+  const text = callLogText({ callType: call.callType, status, durationSeconds });
+  const msg = await updateMessageText(call.messageId, text);
+  io.to(convRoom(call.conversationId)).emit("message:update", msg);
+}
 function previewTextFor(message) {
   switch (message.type) {
     case "image":
@@ -621,6 +700,8 @@ function previewTextFor(message) {
       return "📊 Poll";
     case "game":
       return "🎮 Game";
+    case "call":
+      return "📞 " + (message.text?.trim() || "Call");
     default:
       return message.text?.trim() || "New message";
   }
@@ -772,22 +853,27 @@ async function joinAllConversations(socket, userId) {
 }
 
 // Stamps each member of each conversation with their live online status, based on
-// whether they currently have any open socket connection (userSockets).
+// whether they currently have any open socket connection (userSockets) — but only
+// if that member has "Show my online status to others" enabled. Members who've
+// turned it off always show as offline to everyone else.
 function withOnlineMembers(conversations) {
   return conversations.map((c) => ({
     ...c,
     members: (c.members || []).map((m) => ({
       ...m,
-      online: (userSockets.get(m.id)?.size || 0) > 0,
+      online: m.showOnline !== false && (userSockets.get(m.id)?.size || 0) > 0,
     })),
   }));
 }
 
 // Tells everyone who shares a conversation with `userId` that their online status just
 // changed, so group member lists and DM contact rows update live instead of staying
-// stuck at whatever they showed on initial load.
+// stuck at whatever they showed on initial load. Skipped entirely if this user has
+// turned off "Show my online status to others" — nobody should see them go on/offline.
 async function broadcastPresence(userId, online) {
   try {
+    const user = await getUserById(userId);
+    if (user && user.showOnline === false) return;
     const conversations = await getUserConversations(userId);
     for (const c of conversations) {
       io.to(convRoom(c.id)).emit("presence:update", { userId, online });
@@ -881,6 +967,24 @@ io.on("connection", async (socket) => {
         const entry = onlineUsers.get(sid);
         if (entry) entry.username = updated.username;
         io.to(sid).emit("profile:updated", updated);
+      }
+
+      // If the online-visibility toggle changed, push it out immediately so open
+      // chat lists/member panels reflect it right away instead of waiting for the
+      // next reconnect. Off -> tell everyone they're now offline (bypassing the
+      // usual "don't broadcast if showOnline is off" guard, since that guard would
+      // otherwise swallow exactly the "gone offline" event we need to send here).
+      // On -> tell everyone they're online again (they're still connected right now).
+      if (typeof showOnline === "boolean") {
+        if (showOnline) {
+          broadcastPresence(me.userId, true);
+        } else {
+          getUserConversations(me.userId)
+            .then((convs) => {
+              for (const c of convs) io.to(convRoom(c.id)).emit("presence:update", { userId: me.userId, online: false });
+            })
+            .catch((err) => console.error("presence broadcast (offline) failed", err.message));
+        }
       }
     } catch (err) {
       console.error("profile:update failed", err.message);
@@ -1575,8 +1679,9 @@ io.on("connection", async (socket) => {
   });
 
   // Call by persistent userId (e.g. from a conversation member list) — resolved to
-  // whichever of their live sockets is currently connected.
-  socket.on("call:invite:user", ({ toUserId, callId, callType }) => {
+  // whichever of their live sockets is currently connected. This is the path that
+  // actually places 1:1 calls in the UI, so it's the one we log to chat.
+  socket.on("call:invite:user", async ({ toUserId, callId, callType }) => {
     const caller = onlineUsers.get(socket.id);
     if (!caller) return;
     const targetSocketId = [...(userSockets.get(toUserId) || [])][0];
@@ -1590,12 +1695,30 @@ io.on("connection", async (socket) => {
       callId,
       callType: callType === "audio" ? "audio" : "video",
     });
+
+    try {
+      const conversationId = await getOrCreateDirectConversation(caller.userId, toUserId);
+      await startCallLog({
+        conversationId,
+        callId,
+        callerId: caller.userId,
+        calleeId: toUserId,
+        callType: callType === "audio" ? "audio" : "video",
+      });
+    } catch (err) {
+      console.error("call log start failed:", err.message);
+    }
   });
 
   socket.on("call:answer", ({ toId, accepted, callId }) => {
     resolveCallTargets(toId).forEach((sid) =>
       io.to(sid).emit("call:answer", { fromId: socket.id, accepted, callId }),
     );
+    if (accepted) {
+      connectCallLog(callId).catch((err) => console.error("call log connect failed:", err.message));
+    } else {
+      finishCallLog(callId, "declined").catch((err) => console.error("call log decline failed:", err.message));
+    }
   });
 
   socket.on("call:signal", ({ toId, signal, callId }) => {
@@ -1608,6 +1731,7 @@ io.on("connection", async (socket) => {
     resolveCallTargets(toId).forEach((sid) =>
       io.to(sid).emit("call:end", { fromId: socket.id, callId }),
     );
+    finishCallLog(callId).catch((err) => console.error("call log finish failed:", err.message));
   });
 
   // --- WebRTC group video calls (mesh, capped at 8 participants) ---

@@ -118,7 +118,7 @@ export async function initDb() {
       conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       type VARCHAR(10) NOT NULL DEFAULT 'text'
-        CHECK (type IN ('text', 'image', 'video', 'audio', 'file', 'game', 'poll')),
+        CHECK (type IN ('text', 'image', 'video', 'audio', 'file', 'game', 'poll', 'call')),
       text TEXT NULL,
       media_url VARCHAR(500) NULL,
       media_name VARCHAR(255) NULL,
@@ -132,6 +132,33 @@ export async function initDb() {
 
   // Add delivered_at for databases created before delivery-tracking was added.
   await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP NULL`);
+
+  // Widen the type CHECK for already-deployed databases (CREATE TABLE IF NOT EXISTS
+  // is a no-op once the table exists, so adding 'call' above only helps fresh DBs).
+  // Postgres auto-names this constraint <table>_<column>_check.
+  await query(`ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_type_check`);
+  await query(`
+    ALTER TABLE messages ADD CONSTRAINT messages_type_check
+      CHECK (type IN ('text', 'image', 'video', 'audio', 'file', 'game', 'poll', 'call'))
+  `);
+
+  // Call-log messages: who called whom, what kind of call, how it ended, and how
+  // long it lasted. One row per call, linked to the chat message that shows it.
+  await query(`
+    CREATE TABLE IF NOT EXISTS call_logs (
+      id SERIAL PRIMARY KEY,
+      message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      caller_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      call_type VARCHAR(10) NOT NULL DEFAULT 'audio' CHECK (call_type IN ('audio', 'video', 'group')),
+      status VARCHAR(12) NOT NULL DEFAULT 'ringing'
+        CHECK (status IN ('ringing', 'connected', 'completed', 'missed', 'declined', 'no_answer')),
+      started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      connected_at TIMESTAMP NULL,
+      ended_at TIMESTAMP NULL,
+      duration_seconds INTEGER NULL
+    )
+  `);
 
   // Emoji/sticker/voice/video reactions on messages. A user can react to the same
   // message with several different emoji, but only once per emoji (re-reacting with
@@ -561,6 +588,7 @@ export async function getUserConversations(userId) {
   for (const conv of rows) {
     const [members] = await query(
       `SELECT u.id, u.username, u.phone_number AS "phoneNumber", u.avatar_url AS "avatarUrl",
+              u.show_online AS "showOnline",
               cm.is_admin AS "isAdmin", cm.is_officer AS "isOfficer"
        FROM conversation_members cm JOIN users u ON u.id = cm.user_id
        WHERE cm.conversation_id = ?`,
@@ -568,6 +596,7 @@ export async function getUserConversations(userId) {
     );
     conv.members = members.map((m) => ({
       ...m,
+      showOnline: !!m.showOnline,
       isAdmin: !!m.isAdmin,
       isOfficer: !!m.isOfficer,
       role: m.isAdmin ? "admin" : m.isOfficer ? "officer" : "member",
@@ -895,6 +924,86 @@ export async function updateMessageText(messageId, text) {
   await query("UPDATE messages SET text = ? WHERE id = ?", [text, messageId]);
   const [rows] = await query(`${MESSAGE_SELECT} WHERE m.id = ?`, [messageId]);
   return rows[0];
+}
+
+// --- Call logs ---
+// A call is logged as a normal chat message (type 'call') the moment it's placed,
+// with a linked call_logs row tracking its live status. As the call progresses
+// (rings -> connects -> ends) we update both the call_logs row and the message's
+// text so every participant's chat list/thread reflects the latest state, exactly
+// like the game-invite messages above.
+export async function createCallLog({ conversationId, messageId, callerId, callType }) {
+  const [rows] = await query(
+    `INSERT INTO call_logs (message_id, conversation_id, caller_id, call_type, status)
+     VALUES (?, ?, ?, ?, 'ringing') RETURNING id`,
+    [messageId, conversationId, callerId, callType || "audio"]
+  );
+  return rows[0].id;
+}
+
+export async function updateCallLog(messageId, patch) {
+  const sets = [];
+  const values = [];
+  if (patch.status !== undefined) {
+    sets.push("status = ?");
+    values.push(patch.status);
+  }
+  if (patch.connectedAt !== undefined) {
+    sets.push("connected_at = ?");
+    values.push(patch.connectedAt);
+  }
+  if (patch.endedAt !== undefined) {
+    sets.push("ended_at = ?");
+    values.push(patch.endedAt);
+  }
+  if (patch.durationSeconds !== undefined) {
+    sets.push("duration_seconds = ?");
+    values.push(patch.durationSeconds);
+  }
+  if (sets.length === 0) return null;
+  values.push(messageId);
+  await query(`UPDATE call_logs SET ${sets.join(", ")} WHERE message_id = ?`, values);
+  const [rows] = await query("SELECT * FROM call_logs WHERE message_id = ?", [messageId]);
+  return rows[0] || null;
+}
+
+export async function getCallLogByMessageId(messageId) {
+  const [rows] = await query(
+    `SELECT id, message_id AS "messageId", conversation_id AS "conversationId",
+            caller_id AS "callerId", call_type AS "callType", status,
+            started_at AS "startedAt", connected_at AS "connectedAt",
+            ended_at AS "endedAt", duration_seconds AS "durationSeconds"
+     FROM call_logs WHERE message_id = ?`,
+    [messageId]
+  );
+  return rows[0] || null;
+}
+
+// Builds the chat-bubble text for a call message from its current call_logs status.
+// Kept here (not duplicated per-caller) so every place that touches a call log
+// renders the exact same text.
+export function callLogText({ callType, status, durationSeconds }) {
+  const kind = callType === "video" ? "Video call" : callType === "group" ? "Group call" : "Voice call";
+  switch (status) {
+    case "ringing":
+      return `${kind} — Calling…`;
+    case "connected":
+      return `${kind} — In progress`;
+    case "completed": {
+      const s = durationSeconds || 0;
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      const dur = m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+      return `${kind} — ${dur}`;
+    }
+    case "missed":
+    case "no_answer":
+      return `${kind} — No answer`;
+    case "declined":
+      return `${kind} — Declined`;
+    default:
+      return kind;
+  }
 }
 
 // Fetches the most recent `limit` messages, or — when `beforeMessageId` is given —

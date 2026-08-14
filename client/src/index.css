@@ -739,6 +739,38 @@ textarea {
   height: 100%;
   object-fit: cover;
 }
+.conv-avatar-wrap {
+  position: relative;
+  overflow: visible;
+}
+.online-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2px solid var(--surface-1, #fff);
+  box-sizing: content-box;
+}
+.online-count-badge {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #22c55e;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  border: 2px solid var(--surface-1, #fff);
+  box-sizing: content-box;
+}
 .roster-name {
   flex: 1;
   min-width: 0;
@@ -1105,6 +1137,10 @@ textarea {
   background: var(--bubble-mine-gradient, var(--bubble-mine));
   color: var(--bubble-mine-text);
   border-radius: 16px 16px 4px 16px;
+}
+.msg-call-log {
+  display: flex;
+  align-items: center;
 }
 .msg-bubble.poll-bubble,
 .msg.mine .msg-bubble.poll-bubble {

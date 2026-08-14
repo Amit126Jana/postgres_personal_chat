@@ -590,6 +590,8 @@ function App() {
         return `${who}: 🎮 ${lastMessage.text || "Played a game"}`;
       case "poll":
         return `${who}: 📊 Poll`;
+      case "call":
+        return `${who}: 📞 ${lastMessage.text || "Call"}`;
       default:
         return `${who}: ${lastMessage.text || ""}`;
     }
@@ -2190,7 +2192,7 @@ function App() {
                     });
                   }}
                 >
-                  <span className="avatar">
+                  <span className="avatar conv-avatar-wrap">
                     {c.avatarUrl ? (
                       <img src={mediaSrc(c.avatarUrl)} alt="" />
                     ) : c.type === "group" ? (
@@ -2198,6 +2200,21 @@ function App() {
                     ) : (
                       initials(c.name)
                     )}
+                    {c.type !== "group" &&
+                      (c.members || []).some((m) => m.id !== userId && m.online) && (
+                        <span className="online-dot" title="Online" />
+                      )}
+                    {c.type === "group" &&
+                      (() => {
+                        const onlineCount = (c.members || []).filter(
+                          (m) => m.id !== userId && m.online,
+                        ).length;
+                        return onlineCount > 0 ? (
+                          <span className="online-count-badge" title={`${onlineCount} online`}>
+                            {onlineCount}
+                          </span>
+                        ) : null;
+                      })()}
                   </span>
                   <span className="roster-text-col">
                     <span className="roster-name">
@@ -2686,6 +2703,15 @@ function App() {
                             <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
                               Tap to open
                             </div>
+                          </div>
+                        </div>
+                      ) : m.type === "call" ? (
+                        <div className="msg-row">
+                          <div className="msg-bubble msg-call-log">
+                            <svg className="icon" width="16" height="16" style={{ marginRight: "6px", flexShrink: 0 }}>
+                              <use href={m.text?.includes("Video") ? "#video-call-icon" : "#phone-icon"} />
+                            </svg>
+                            <span className="msg-text">{m.text}</span>
                           </div>
                         </div>
                       ) : m.type === "poll" ? (
