@@ -181,6 +181,12 @@ export async function initDb() {
   // Add delivered_at for databases created before delivery-tracking was added.
   await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP NULL`);
 
+  // Add reply_to_id for databases created before reply support was added. A message
+  // can optionally reference another message in the same conversation it's replying
+  // to; if the original is later deleted the FK is nulled out (ON DELETE SET NULL)
+  // so the reply just falls back to showing "message deleted" in its quote.
+  await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER NULL REFERENCES messages(id) ON DELETE SET NULL`);
+
   // Widen the type CHECK for already-deployed databases (CREATE TABLE IF NOT EXISTS
   // is a no-op once the table exists, so adding 'call' above only helps fresh DBs).
   // Postgres auto-names this constraint <table>_<column>_check.
@@ -1043,8 +1049,14 @@ const MESSAGE_SELECT = `
   SELECT m.id, m.conversation_id AS "conversationId", m.user_id AS "userId", u.username,
          m.type, m.text, m.media_url AS "mediaUrl", m.media_name AS "mediaName",
          m.seen_at AS "seenAt", m.delivered_at AS "deliveredAt", m.edited_at AS "editedAt",
-         m.deleted, m.created_at AS "createdAt"
-  FROM messages m JOIN users u ON u.id = m.user_id`;
+         m.deleted, m.created_at AS "createdAt",
+         m.reply_to_id AS "replyToId", ru.username AS "replyToUsername",
+         rm.type AS "replyToType", rm.text AS "replyToText", rm.media_url AS "replyToMediaUrl",
+         rm.deleted AS "replyToDeleted"
+  FROM messages m
+  JOIN users u ON u.id = m.user_id
+  LEFT JOIN messages rm ON rm.id = m.reply_to_id
+  LEFT JOIN users ru ON ru.id = rm.user_id`;
 
 // A message can be edited/deleted by its sender at any time until it's been seen by
 // someone else, and for 1 hour after that. Group admins can additionally delete ANY
@@ -1130,11 +1142,11 @@ export async function getLatestReactionForConversation(conversationId) {
   return rows[0] || null;
 }
 
-export async function addMessage({ conversationId, userId, type, text, mediaUrl, mediaName }) {
+export async function addMessage({ conversationId, userId, type, text, mediaUrl, mediaName, replyToId }) {
   const [inserted] = await query(
-    `INSERT INTO messages (conversation_id, user_id, type, text, media_url, media_name)
-     VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
-    [conversationId, userId, type || "text", text || null, mediaUrl || null, mediaName || null]
+    `INSERT INTO messages (conversation_id, user_id, type, text, media_url, media_name, reply_to_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    [conversationId, userId, type || "text", text || null, mediaUrl || null, mediaName || null, replyToId || null]
   );
   const [rows] = await query(`${MESSAGE_SELECT} WHERE m.id = ?`, [inserted[0].id]);
   return rows[0];

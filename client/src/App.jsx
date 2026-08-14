@@ -3238,19 +3238,27 @@ function App() {
                                 scrollToMessage(m.replyToId);
                               }}
                             >
-                              <div className="msg-reply-quote-name">{m.replyToUsername || "Unknown"}</div>
-                              <div className="msg-reply-quote-text">
-                                {m.replyToDeleted || !m.replyToUsername
-                                  ? "This message was deleted"
-                                  : m.replyToType === "image"
-                                    ? "📷 Photo"
-                                    : m.replyToType === "video"
-                                      ? "🎥 Video"
-                                      : m.replyToType === "audio"
-                                        ? "🎤 Voice message"
-                                        : m.replyToType === "file"
-                                          ? "📎 File"
-                                          : m.replyToText || ""}
+                              <div className="msg-reply-quote-body">
+                                <div className="msg-reply-quote-name">
+                                  {m.replyToDeleted || !m.replyToUsername
+                                    ? "Unknown"
+                                    : m.replyToUsername === username
+                                      ? "You"
+                                      : m.replyToUsername}
+                                </div>
+                                <div className="msg-reply-quote-text">
+                                  {m.replyToDeleted || !m.replyToUsername
+                                    ? "This message was deleted"
+                                    : m.replyToType === "image"
+                                      ? "📷 Photo"
+                                      : m.replyToType === "video"
+                                        ? "🎥 Video"
+                                        : m.replyToType === "audio"
+                                          ? "🎤 Voice message"
+                                          : m.replyToType === "file"
+                                            ? "📎 File"
+                                            : m.replyToText || ""}
+                                </div>
                               </div>
                               {m.replyToType === "image" && m.replyToMediaUrl && (
                                 <img src={mediaSrc(m.replyToMediaUrl)} alt="" className="msg-reply-quote-thumb" />
@@ -3487,7 +3495,10 @@ function App() {
                   <div className="composer-reply-bar">
                     <div className="composer-reply-bar-line" />
                     <div className="composer-reply-bar-body">
-                      <div className="composer-reply-bar-name">{replyingTo.username}</div>
+                      <div className="composer-reply-bar-label">Replying to</div>
+                      <div className="composer-reply-bar-name">
+                        {replyingTo.username === username ? "You" : replyingTo.username}
+                      </div>
                       <div className="composer-reply-bar-text">
                         {replyingTo.deleted
                           ? "This message was deleted"

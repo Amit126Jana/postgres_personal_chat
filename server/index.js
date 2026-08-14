@@ -1295,7 +1295,7 @@ io.on("connection", async (socket) => {
   });
 
   // --- Send a message: text, or media (image/video/audio/file) already uploaded via /api/upload ---
-  socket.on("message", async ({ conversationId, text, type, mediaUrl, mediaName }) => {
+  socket.on("message", async ({ conversationId, text, type, mediaUrl, mediaName, replyToId }) => {
     const me = onlineUsers.get(socket.id);
     if (!me || !conversationId) return;
     if (!(await isConversationMember(conversationId, me.userId))) return;
@@ -1318,6 +1318,7 @@ io.on("connection", async (socket) => {
         text: text ? text.toString().slice(0, 2000) : null,
         mediaUrl,
         mediaName,
+        replyToId: replyToId || null,
       });
       const delivered = await deliverIfRecipientOnline(conversationId, me.userId, saved);
       io.to(convRoom(conversationId)).emit("message", delivered);
