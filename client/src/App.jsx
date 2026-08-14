@@ -299,6 +299,11 @@ function App() {
       darkMode ? "dark" : "light",
     );
     localStorage.setItem("mf_theme_mode", darkMode ? "dark" : "light");
+    // Keep the browser tab favicon in sync with the in-app theme toggle too — there
+    // are two logo files (one designed for a dark backdrop, one for light) so the
+    // mark stays legible in both the light and dark tab bar.
+    const favicon = document.getElementById("favicon");
+    if (favicon) favicon.href = darkMode ? "/logo-dark.png" : "/logo-light.png";
   }, [darkMode]);
 
   // Server pushes this account's "delete for me" / "clear chat" / wallpaper state as
@@ -1973,7 +1978,7 @@ function App() {
         <div className="gate">
           <div className="gate-card">
             <div className="gate-mark">
-              <img src="/logo.png" alt="" className="gate-logo" />
+              <img src={darkMode ? "/logo-dark.png" : "/logo-light.png"} alt="" className="gate-logo" />
               MakeFriends
             </div>
             <p className="gate-sub">Reconnecting your session…</p>
@@ -1986,6 +1991,7 @@ function App() {
         serverUrl={SERVER_URL}
         onAuthenticated={handleAuthenticated}
         initialError={loginError}
+        darkMode={darkMode}
       />
     );
   }
@@ -1997,7 +2003,7 @@ function App() {
       <nav className="icon-rail">
         <div className="rail-brand-row">
           <div className="rail-brand">
-            <img src="/logo.png" alt="MakeFriends" />
+            <img src={darkMode ? "/logo-dark.png" : "/logo-light.png"} alt="MakeFriends" />
           </div>
           <span className="rail-wordmark">MakeFriends</span>
         </div>
@@ -2387,6 +2393,26 @@ function App() {
         <>
           <aside className="sidebar">
             <div className="sidebar-header">
+              <button
+                type="button"
+                className="sidebar-menu-btn"
+                title="Menu"
+                onClick={() => setMobileMoreOpen(true)}
+              >
+                <svg className="icon" width="20" height="20">
+                  <use href="#menu-icon" />
+                </svg>
+              </button>
+              <div className="sidebar-brand">
+                <img
+                  src={darkMode ? "/logo-dark.png" : "/logo-light.png"}
+                  alt=""
+                  className="sidebar-brand-logo"
+                />
+                <span className="sidebar-brand-word">
+                  Make<span className="sidebar-brand-word-accent">Friends</span>
+                </span>
+              </div>
               <h1 className="sidebar-title">Chats</h1>
               <button
                 type="button"

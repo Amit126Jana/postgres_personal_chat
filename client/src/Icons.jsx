@@ -184,6 +184,15 @@ export default function IconSprite() {
         />
       </symbol>
 
+      <symbol id="menu-icon" viewBox="0 0 24 24">
+        <path
+          d="M4 6h16M4 12h16M4 18h16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      </symbol>
       <symbol id="settings-icon" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
         <path

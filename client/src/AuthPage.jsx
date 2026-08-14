@@ -72,7 +72,7 @@ function clearTrustedSession() {
 
 // Handles both sign-in and account creation against the REST auth endpoints, then
 // hands the resulting { token, user } up to App once the server confirms the credentials.
-export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
+export default function AuthPage({ serverUrl, onAuthenticated, initialError, darkMode }) {
   const [mode, setMode] = useState("login"); // "login" | "register"
   const [useOtp, setUseOtp] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -269,7 +269,7 @@ export default function AuthPage({ serverUrl, onAuthenticated, initialError }) {
     <div className="gate">
       <div className="gate-card">
         <div className="gate-mark">
-          <img src="/logo.png" alt="" className="gate-logo" />
+          <img src={darkMode ? "/logo-dark.png" : "/logo-light.png"} alt="" className="gate-logo" />
           MakeFriends
         </div>
         <h1>{mode === "login" ? "Welcome back." : "Make new friends, today."}</h1>
