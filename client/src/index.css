@@ -884,6 +884,7 @@ textarea {
 .sidebar-search {
   position: relative;
   margin-bottom: 12px;
+  padding: 0 5px;
 }
 .sidebar-search-icon {
   position: absolute;
@@ -910,6 +911,7 @@ textarea {
   display: flex;
   gap: 6px;
   margin-bottom: 14px;
+  padding: 0 5px;
 }
 .sidebar-tab {
   flex: 1;
