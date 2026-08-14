@@ -52,6 +52,11 @@ export async function initDb() {
   // the original 20 chars). No-op if the column is already wide enough.
   await query(`ALTER TABLE users ALTER COLUMN theme_color TYPE VARCHAR(60)`);
 
+  // The column DEFAULT only takes effect on brand-new tables (CREATE TABLE IF NOT
+  // EXISTS is a no-op once the table already exists). Fix the default on already-
+  // deployed databases too, so it actually matches what new signups should get.
+  await query(`ALTER TABLE users ALTER COLUMN theme_color SET DEFAULT 'green'`);
+
   // Optional profile cover/banner image shown behind the avatar on the Settings page.
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_url VARCHAR(500) NULL`);
 
@@ -304,8 +309,8 @@ export async function createUser(phoneNumber, username, passwordHash) {
   }
 
   const [rows] = await query(
-    "INSERT INTO users (phone_number, username, password_hash) VALUES (?, ?, ?) RETURNING id",
-    [phoneNumber, username, passwordHash]
+    "INSERT INTO users (phone_number, username, password_hash, theme_color) VALUES (?, ?, ?, ?) RETURNING id",
+    [phoneNumber, username, passwordHash, "green"]
   );
   return toPublicUser({
     id: rows[0].id,
