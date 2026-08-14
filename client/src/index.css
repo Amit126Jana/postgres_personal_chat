@@ -4874,6 +4874,8 @@ label.modal-user-row {
   .page-panel {
     grid-row: 1;
     grid-column: 1;
+    min-width: 0;
+    max-width: 100vw;
   }
   .mobile-tabbar {
     display: flex;
