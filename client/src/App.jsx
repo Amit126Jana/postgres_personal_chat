@@ -416,6 +416,34 @@ function App() {
     return pc;
   }
 
+  // Checks whether this device actually has the hardware a call needs, before we ring
+  // anyone or accept an incoming call — so people get a clear "no camera/mic" message
+  // up front instead of a call that connects and then silently has no audio/video.
+  // enumerateDevices() lists device *kinds* without needing permission first, which is
+  // exactly what we want here: we're checking for hardware presence, not asking for access.
+  async function checkCallDeviceSupport(type) {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      return { ok: false, message: "This browser doesn't support calls." };
+    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasMic = devices.some((d) => d.kind === "audioinput");
+      const hasCam = devices.some((d) => d.kind === "videoinput");
+      if (!hasMic) {
+        return { ok: false, message: "No microphone found on this device. Voice calls need a mic." };
+      }
+      if (type === "video" && !hasCam) {
+        return { ok: false, message: "No camera found on this device. Try a voice call instead." };
+      }
+      return { ok: true };
+    } catch (err) {
+      console.error("Device check failed", err);
+      // If the check itself fails, don't block the call on it — fall through and let
+      // getUserMedia (called right after) surface the real error.
+      return { ok: true };
+    }
+  }
+
   async function getLocalMedia(type) {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: type === "audio" ? false : true,
@@ -445,8 +473,13 @@ function App() {
     }
   }
 
-  function startCall(toUserId, toUsername, avatarUrl, type = "video") {
+  async function startCall(toUserId, toUsername, avatarUrl, type = "video") {
     if (callState) return; // already in a call — ignore
+    const support = await checkCallDeviceSupport(type);
+    if (!support.ok) {
+      pushToast("Can't start call", support.message);
+      return;
+    }
     const callId = genCallId();
     callIdRef.current = callId;
     callTypeRef.current = type;
@@ -462,6 +495,13 @@ function App() {
     const peer = callPeerRef.current;
     const callId = callIdRef.current;
     if (!peer || !callId) return;
+    const support = await checkCallDeviceSupport(callTypeRef.current);
+    if (!support.ok) {
+      pushToast("Can't join call", support.message);
+      socket.emit("call:answer", { toId: peer.id, accepted: false, callId });
+      teardownCall();
+      return;
+    }
     try {
       await getLocalMedia(callTypeRef.current);
       if (callIdRef.current !== callId) return; // call was ended/replaced while awaiting media
@@ -469,6 +509,7 @@ function App() {
       socket.emit("call:answer", { toId: peer.id, accepted: true, callId });
     } catch (err) {
       console.error("Could not access camera/mic", err);
+      pushToast("Can't join call", "Camera/microphone access was denied or unavailable.");
       socket.emit("call:answer", { toId: peer.id, accepted: false, callId });
       teardownCall();
     }

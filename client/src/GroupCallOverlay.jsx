@@ -11,6 +11,7 @@ export default function GroupCallOverlay({ socket, conversationId, conversationN
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [status, setStatus] = useState("connecting"); // connecting | active | full | error
+  const [deviceErrorMessage, setDeviceErrorMessage] = useState("");
 
   const localStreamRef = useRef(null);
   const pcsRef = useRef(new Map()); // socketId -> RTCPeerConnection
@@ -67,6 +68,24 @@ export default function GroupCallOverlay({ socket, conversationId, conversationN
 
     async function join() {
       try {
+        if (navigator.mediaDevices?.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const hasMic = devices.some((d) => d.kind === "audioinput");
+          const hasCam = devices.some((d) => d.kind === "videoinput");
+          if (!hasMic || !hasCam) {
+            if (!cancelled) {
+              setDeviceErrorMessage(
+                !hasMic && !hasCam
+                  ? "No camera or microphone found on this device."
+                  : !hasMic
+                    ? "No microphone found on this device."
+                    : "No camera found on this device.",
+              );
+              setStatus("error");
+            }
+            return;
+          }
+        }
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -77,7 +96,10 @@ export default function GroupCallOverlay({ socket, conversationId, conversationN
         socket.emit("group-call:join", { conversationId });
       } catch (err) {
         console.error("Could not access camera/mic", err);
-        setStatus("error");
+        if (!cancelled) {
+          setDeviceErrorMessage("Couldn't access your camera or microphone. Check your browser's site permissions and try again.");
+          setStatus("error");
+        }
       }
     }
     join();
@@ -165,8 +187,8 @@ export default function GroupCallOverlay({ socket, conversationId, conversationN
           </div>
           <div className="call-v2-name">{conversationName}</div>
           <div className="call-error-message">
-            Couldn't access your camera or microphone. Check your browser's site
-            permissions and try again.
+            {deviceErrorMessage ||
+              "Couldn't access your camera or microphone. Check your browser's site permissions and try again."}
           </div>
           <div className="call-v2-controls">
             <div className="call-v2-btn-wrap">
