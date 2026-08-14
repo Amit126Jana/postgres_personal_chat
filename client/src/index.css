@@ -666,7 +666,7 @@ textarea {
 .notif-tabs {
   display: flex;
   gap: 6px;
-  padding: 0 20px 16px;
+  padding: 20px 16px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -5059,7 +5059,7 @@ label.modal-user-row {
   .notif-tabs {
     flex-wrap: wrap;
     overflow-x: visible;
-    padding: 0 16px 14px;
+    padding: 16px 14px;
   }
   .notif-tab {
     font-size: 12px;
