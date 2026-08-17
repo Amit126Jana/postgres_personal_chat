@@ -1588,7 +1588,7 @@ textarea {
   color: var(--text-faint);
 }
 .msg-tick-seen {
-  color: #47c0ff;
+  color: var(--success);
 }
 .msg-bubble-clickable {
   cursor: pointer;
