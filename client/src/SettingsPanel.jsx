@@ -553,7 +553,17 @@ export default function SettingsPanel({
               <div className="settings-blocked-list">
                 {blocked.map((u) => (
                   <div key={u.id} className="settings-blocked-row">
-                    <span className="settings-blocked-name">{u.username}</span>
+                    <span className="settings-blocked-avatar">
+                      {u.avatarUrl ? (
+                        <img src={resolveMedia(u.avatarUrl)} alt="" />
+                      ) : (
+                        (u.username || "?").slice(0, 2).toUpperCase()
+                      )}
+                    </span>
+                    <span className="settings-blocked-info">
+                      <span className="settings-blocked-name">{u.username}</span>
+                      {u.phoneNumber && <span className="settings-blocked-phone">{u.phoneNumber}</span>}
+                    </span>
                     <button type="button" className="settings-mini-btn" onClick={() => handleUnblock(u.id)}>
                       Unblock
                     </button>
