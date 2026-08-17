@@ -4093,6 +4093,7 @@ function App() {
             ...otherMemberOf(activeConv),
             avatarUrl: activeConv.avatarUrl ? mediaSrc(activeConv.avatarUrl) : null,
           }}
+          restricted={!!otherMemberOf(activeConv)?.isPersonal && !isAdmin}
           mediaCount={convInfoByConv[activeConv.id]?.mediaCount}
           onClose={() => setShowUserInfo(false)}
           onOpenAvatar={(url) => setLightboxImage(url)}

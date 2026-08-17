@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
  */
 export default function UserProfilePanel({
   user, // { id, username, avatarUrl, phoneNumber, tagline, online }
+  restricted = false, // true when this account was marked "Personal" by an admin and the viewer isn't an admin
   mediaCount,
   onClose,
   onOpenAvatar,
@@ -53,6 +54,48 @@ export default function UserProfilePanel({
   }
 
   if (!user) return null;
+
+  if (restricted) {
+    return (
+      <div className="info-panel-backdrop" onClick={onClose}>
+        <div className="info-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="info-panel-header">
+            <button type="button" className="info-panel-back" onClick={onClose} aria-label="Back">
+              ←
+            </button>
+            <h3>User Profile</h3>
+            <button type="button" className="info-panel-close" onClick={onClose} aria-label="Close">
+              <svg className="icon" width="16" height="16"><use href="#close-icon" /></svg>
+            </button>
+          </div>
+
+          <div className="info-panel-hero">
+            <div className="info-panel-avatar">
+              <span>{(user.username || "?").slice(0, 2).toUpperCase()}</span>
+            </div>
+            <div className="info-panel-name">{user.username}</div>
+          </div>
+
+          <div className="info-panel-section" style={{ textAlign: "center" }}>
+            <span className="info-panel-row-icon" style={{ margin: "0 auto 10px" }}>
+              <svg className="icon" width="20" height="20"><use href="#lock-icon" /></svg>
+            </span>
+            <div className="info-panel-row-label">This profile is private</div>
+            <p className="settings-hint" style={{ margin: "6px 0 0" }}>
+              Only an admin can view this person's profile details. You can still message them.
+            </p>
+          </div>
+
+          <div className="info-panel-actions">
+            <button type="button" onClick={onMessage}>
+              <svg className="icon" width="18" height="18"><use href="#chat-icon" /></svg>
+              Message
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   async function handleBlock() {
     if (!window.confirm(`Block ${user.username}? They won't be able to message or call you.`)) return;

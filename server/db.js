@@ -71,6 +71,12 @@ export async function initDb() {
   await query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_status_check`);
   await query(`ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('active', 'suspended'))`);
 
+  // Admin-only "Personal account" flag (distinct from the user's own self-service
+  // is_private toggle). Set exclusively from the Admin panel — see setPersonalProfile.
+  // When on, only an admin can view this user's profile details; everyone else still
+  // sees them in the directory and can open/continue a chat with them as normal.
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_personal SMALLINT NOT NULL DEFAULT 0`);
+
   // A conversation is either a 1:1 "direct" chat or a named "group" chat.
   await query(`
     CREATE TABLE IF NOT EXISTS conversations (
@@ -459,7 +465,7 @@ export async function getUserById(userId) {
     `SELECT id, phone_number AS "phoneNumber", username, avatar_url AS "avatarUrl",
             cover_url AS "coverUrl",
             tagline, theme_color AS "themeColor", show_online AS "showOnline", is_admin AS "isAdmin",
-            is_private AS "isPrivate",
+            is_private AS "isPrivate", is_personal AS "isPersonal",
             status
      FROM users WHERE id = ?`,
     [userId]
@@ -470,6 +476,7 @@ export async function getUserById(userId) {
     showOnline: !!rows[0].showOnline,
     isAdmin: !!rows[0].isAdmin,
     isPrivate: !!rows[0].isPrivate,
+    isPersonal: !!rows[0].isPersonal,
   };
 }
 
@@ -477,9 +484,22 @@ export async function getUserById(userId) {
 
 export async function listUsers() {
   const [rows] = await query(
-    'SELECT id, phone_number AS "phoneNumber", username, is_private AS "isPrivate" FROM users ORDER BY username'
+    'SELECT id, phone_number AS "phoneNumber", username, is_private AS "isPrivate", is_personal AS "isPersonal" FROM users ORDER BY username'
   );
-  return rows.map((u) => ({ ...u, isPrivate: !!u.isPrivate }));
+  return rows.map((u) => ({ ...u, isPrivate: !!u.isPrivate, isPersonal: !!u.isPersonal }));
+}
+
+// Admin-only: marks/unmarks an account as "Personal". Only an admin (or the user
+// themselves) may then view that account's full profile — see requireCanViewProfile
+// in index.js. Chatting with the user is never affected by this flag.
+export async function setPersonalProfile(userId, isPersonal) {
+  const [rows] = await query(
+    `UPDATE users SET is_personal = ? WHERE id = ?
+     RETURNING id, phone_number AS "phoneNumber", username, is_personal AS "isPersonal"`,
+    [isPersonal ? 1 : 0, userId]
+  );
+  if (!rows[0]) return null;
+  return { ...rows[0], isPersonal: !!rows[0].isPersonal };
 }
 
 // Toggles the Settings > Privacy & Security > "Private Profile" flag.
@@ -493,10 +513,10 @@ export async function listUsersForAdmin() {
   const [rows] = await query(
     `SELECT id, phone_number AS "phoneNumber", username, avatar_url AS "avatarUrl",
             tagline, created_at AS "createdAt", last_seen AS "lastSeen", status,
-            is_admin AS "isAdmin"
+            is_admin AS "isAdmin", is_personal AS "isPersonal"
      FROM users ORDER BY username`
   );
-  return rows.map((u) => ({ ...u, isAdmin: !!u.isAdmin }));
+  return rows.map((u) => ({ ...u, isAdmin: !!u.isAdmin, isPersonal: !!u.isPersonal }));
 }
 
 // Full group directory for the admin panel — every group conversation with its member
@@ -816,7 +836,7 @@ export async function getUserConversations(userId) {
   for (const conv of rows) {
     const [members] = await query(
       `SELECT u.id, u.username, u.phone_number AS "phoneNumber", u.avatar_url AS "avatarUrl",
-              u.show_online AS "showOnline",
+              u.show_online AS "showOnline", u.is_personal AS "isPersonal",
               cm.is_admin AS "isAdmin", cm.is_officer AS "isOfficer"
        FROM conversation_members cm JOIN users u ON u.id = cm.user_id
        WHERE cm.conversation_id = ?`,
@@ -825,6 +845,7 @@ export async function getUserConversations(userId) {
     conv.members = members.map((m) => ({
       ...m,
       showOnline: !!m.showOnline,
+      isPersonal: !!m.isPersonal,
       isAdmin: !!m.isAdmin,
       isOfficer: !!m.isOfficer,
       role: m.isAdmin ? "admin" : m.isOfficer ? "officer" : "member",

@@ -80,6 +80,14 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
     runAction(u.id, "", "DELETE");
   }
 
+  function handleMakePersonal(u) {
+    runAction(u.id, "/personal", "POST");
+  }
+
+  function handleRemovePersonal(u) {
+    runAction(u.id, "/personal", "DELETE");
+  }
+
   async function load() {
     setLoading(true);
     setError("");
@@ -291,6 +299,11 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
                     <div className="admin-row-name">
                       {u.username}
                       {u.isAdmin && <span className="admin-badge">Admin</span>}
+                      {u.isPersonal && (
+                        <span className="admin-badge admin-badge-personal" title="Only admins can view this profile">
+                          Personal
+                        </span>
+                      )}
                     </div>
                     <div className="admin-row-sub">{u.phoneNumber}</div>
                     {u.tagline && <div className="admin-row-tagline">{u.tagline}</div>}
@@ -340,6 +353,27 @@ export default function AdminPage({ serverUrl, token, adminEmail, onLogout, medi
                       onClick={() => handleSuspend(u)}
                     >
                       <svg className="icon" width="15" height="15"><use href="#ban-icon" /></svg>
+                    </button>
+                  )}
+                  {u.isPersonal ? (
+                    <button
+                      type="button"
+                      className="adminx-icon-btn adminx-icon-personal adminx-icon-personal-active"
+                      title="Remove Personal — profile becomes visible to everyone again"
+                      disabled={busyId === u.id}
+                      onClick={() => handleRemovePersonal(u)}
+                    >
+                      <svg className="icon" width="15" height="15"><use href="#lock-icon" /></svg>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="adminx-icon-btn adminx-icon-personal"
+                      title="Make Personal — only admins can view this profile; chat still works"
+                      disabled={busyId === u.id}
+                      onClick={() => handleMakePersonal(u)}
+                    >
+                      <svg className="icon" width="15" height="15"><use href="#lock-icon" /></svg>
                     </button>
                   )}
                   <button

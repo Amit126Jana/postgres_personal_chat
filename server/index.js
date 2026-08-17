@@ -50,6 +50,7 @@ import {
   setUserAdminByPhone,
   setUserStatus,
   deleteUserAccount,
+  setPersonalProfile,
   blockUser,
   unblockUser,
   listBlockedUsers,
@@ -731,6 +732,32 @@ app.post("/api/admin/users/:id/approve", requireAuth, requireAdmin, async (req, 
   try {
     const targetId = Number(req.params.id);
     const updated = await setUserStatus(targetId, "active");
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Marks an account "Personal": only an admin (or the account owner) can see its full
+// profile details afterward. Does not affect messaging — everyone can still chat with
+// this user as normal, and they still appear in the user directory.
+app.post("/api/admin/users/:id/personal", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+    const updated = await setPersonalProfile(targetId, true);
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reverses the above — profile becomes visible to everyone again.
+app.delete("/api/admin/users/:id/personal", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+    const updated = await setPersonalProfile(targetId, false);
     if (!updated) return res.status(404).json({ error: "User not found" });
     res.json(updated);
   } catch (err) {
