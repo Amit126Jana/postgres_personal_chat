@@ -520,7 +520,23 @@ app.post("/api/chat-requests", requireAuth, async (req, res) => {
     if (await directConversationExists(req.user.id, targetId)) {
       return res.status(400).json({ error: "You already have a chat with this user." });
     }
-    const request = await createChatRequest(req.user.id, targetId);
+    // Only one active pending request per direction — reject outright instead of
+    // silently reusing the existing one, so duplicate sends (double-click, repeat API
+    // calls, etc.) surface a clear error rather than re-notifying the target.
+    const existingRequest = await getPendingRequestBetween(req.user.id, targetId);
+    if (existingRequest) {
+      return res.status(409).json({ error: "You already have a pending request to this user." });
+    }
+    let request;
+    try {
+      request = await createChatRequest(req.user.id, targetId);
+    } catch (err) {
+      // Unique-index violation: a concurrent request beat this one to the insert.
+      if (err.code === "23505") {
+        return res.status(409).json({ error: "You already have a pending request to this user." });
+      }
+      throw err;
+    }
     await createNotification(targetId, "chat_request", req.user.id, { requestId: request.id });
     const unread = await countUnreadNotifications(targetId);
     const pending = await countPendingRequests(targetId);

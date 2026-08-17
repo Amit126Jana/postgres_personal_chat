@@ -671,16 +671,16 @@ export async function getPendingRequestBetween(requesterId, targetId) {
   return rows[0] || null;
 }
 
-// Creates a pending request from requesterId -> targetId, or returns the existing
-// pending one if already sent. Throws if either side has blocked the other.
+// Creates a pending request from requesterId -> targetId. Throws (code "BLOCKED") if
+// either side has blocked the other, or lets a unique-constraint violation (code
+// "23505") bubble up if a pending request between the two already exists — callers
+// should check getPendingRequestBetween first and treat 23505 as "already pending".
 export async function createChatRequest(requesterId, targetId) {
   if (await isBlockedEitherWay(requesterId, targetId)) {
     const err = new Error("You can't send a request to this user.");
     err.code = "BLOCKED";
     throw err;
   }
-  const existing = await getPendingRequestBetween(requesterId, targetId);
-  if (existing) return existing;
   const [rows] = await query(
     `INSERT INTO chat_requests (requester_id, target_id) VALUES (?, ?) RETURNING *`,
     [requesterId, targetId]
