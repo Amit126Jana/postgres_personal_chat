@@ -293,6 +293,9 @@ function App() {
         delete next[id];
         return next;
       });
+      // Any messages that arrived while the tab was backgrounded still need to be
+      // marked seen now that the user is actually looking at the open conversation.
+      socket.emit("conversation:read", { conversationId: id });
     }
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
@@ -940,6 +943,13 @@ function App() {
           (c) => c.id === msg.conversationId,
         );
         notifyNewMessage(conv, msg);
+      } else if (!isMine && isActive) {
+        // The conversation is already open and the tab is visible when this message
+        // arrives — mark it (and anything else in the thread) seen right away instead
+        // of waiting for the next time the user opens/re-opens the conversation.
+        // Otherwise the sender's tick gets stuck on "sent"/"delivered" even though
+        // the recipient is actively looking at it.
+        socket.emit("conversation:read", { conversationId: msg.conversationId });
       }
     });
 
