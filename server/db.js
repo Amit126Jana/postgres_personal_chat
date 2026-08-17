@@ -482,9 +482,24 @@ export async function getUserById(userId) {
 
 // --- Users ---
 
-export async function listUsers() {
+// `requesterId` is used to decide whether Personal accounts should be filtered out of
+// the directory: a Personal account is hidden from everyone else's "New Chat" list,
+// but an admin sees everyone, and a Personal user themselves still sees everyone too
+// (being marked Personal only affects how others see *them*, not what they can see).
+export async function listUsers(requesterId) {
+  let requesterExempt = false;
+  if (requesterId != null) {
+    const [meRows] = await query(
+      "SELECT is_admin AS \"isAdmin\", is_personal AS \"isPersonal\" FROM users WHERE id = ?",
+      [requesterId]
+    );
+    requesterExempt = !!meRows[0]?.isAdmin || !!meRows[0]?.isPersonal;
+  }
   const [rows] = await query(
-    'SELECT id, phone_number AS "phoneNumber", username, is_private AS "isPrivate", is_personal AS "isPersonal" FROM users ORDER BY username'
+    `SELECT id, phone_number AS "phoneNumber", username, is_private AS "isPrivate", is_personal AS "isPersonal"
+     FROM users
+     ${requesterExempt ? "" : "WHERE is_personal = 0"}
+     ORDER BY username`
   );
   return rows.map((u) => ({ ...u, isPrivate: !!u.isPrivate, isPersonal: !!u.isPersonal }));
 }

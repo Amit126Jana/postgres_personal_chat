@@ -401,9 +401,9 @@ app.get("/pusher/beams-auth", requireAuth, (req, res) => {
 });
 
 // --- REST: users & conversations (used to populate "new chat" / "new group" UI) ---
-app.get("/api/users", requireAuth, async (_req, res) => {
+app.get("/api/users", requireAuth, async (req, res) => {
   try {
-    res.json(await listUsers());
+    res.json(await listUsers(req.user.id));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1234,7 +1234,7 @@ io.on("connection", async (socket) => {
   // --- Directory: everyone who has ever logged in, so the user can start a chat ---
   socket.on("users:list", async () => {
     try {
-      socket.emit("users:list", await listUsers());
+      socket.emit("users:list", await listUsers(socket.data.user?.id));
     } catch (err) {
       console.error("users:list failed", err.message);
     }
