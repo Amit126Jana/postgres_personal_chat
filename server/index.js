@@ -580,9 +580,9 @@ app.post("/api/chat-requests/:id/accept", requireAuth, async (req, res) => {
 
     for (const sid of userSockets.get(request.requester_id) || []) {
       io.sockets.sockets.get(sid)?.join(convRoom(conversationId));
-      const [theirConversation] = (await getUserConversations(request.requester_id)).filter(
-        (c) => c.id === conversationId,
-      );
+      const [theirConversation] = withOnlineMembers(
+        await getUserConversations(request.requester_id),
+      ).filter((c) => c.id === conversationId);
       io.to(sid).emit("conversation:new", theirConversation);
       io.to(sid).emit("notifications:update", {
         unread: await countUnreadNotifications(request.requester_id),
@@ -591,9 +591,9 @@ app.post("/api/chat-requests/:id/accept", requireAuth, async (req, res) => {
     }
     for (const sid of userSockets.get(req.user.id) || []) {
       io.sockets.sockets.get(sid)?.join(convRoom(conversationId));
-      const [myConversation] = (await getUserConversations(req.user.id)).filter(
-        (c) => c.id === conversationId,
-      );
+      const [myConversation] = withOnlineMembers(
+        await getUserConversations(req.user.id),
+      ).filter((c) => c.id === conversationId);
       io.to(sid).emit("conversation:new", myConversation);
       io.to(sid).emit("notifications:update", {
         unread: await countUnreadNotifications(req.user.id),
@@ -1178,11 +1178,16 @@ io.on("connection", async (socket) => {
     });
     socket.emit("conversations", withOnlineMembers(conversations));
 
-    // If this is the first live connection for this user (not just another tab), let
-    // everyone sharing a conversation with them know they just came online.
-    if (userSockets.get(user.id)?.size === 1) {
-      broadcastPresence(user.id, true);
-    }
+    // Announce "online" on every connect, not just the very first tab. Gating this on
+    // "userSockets size === 1" looked reasonable but is fragile in practice: if a
+    // previous tab/session died without a clean disconnect (sleep/wake, dropped wifi,
+    // backgrounded mobile browser, etc.), its stale socket id can linger in the set for
+    // a while, so a genuine reconnect lands as size > 1 and this broadcast used to get
+    // silently skipped — leaving everyone else's contact list stuck showing them
+    // offline until they manually refreshed. Broadcasting every time is cheap and
+    // idempotent (the client just re-applies the same "online: true" state), so there's
+    // no real downside to dropping the guard.
+    broadcastPresence(user.id, true);
 
     // Catch up delivery receipts for anything sent while this user was offline.
     const deliveredGroups = await markMessagesDeliveredForUser(user.id);
@@ -1288,12 +1293,12 @@ io.on("connection", async (socket) => {
       // recipient their own name instead of the sender's, until they refresh.
       for (const sid of userSockets.get(withUserId) || []) {
         io.sockets.sockets.get(sid)?.join(convRoom(conversationId));
-        const [theirConversation] = (await getUserConversations(withUserId)).filter(
-          (c) => c.id === conversationId,
-        );
+        const [theirConversation] = withOnlineMembers(
+          await getUserConversations(withUserId),
+        ).filter((c) => c.id === conversationId);
         io.to(sid).emit("conversation:new", theirConversation);
       }
-      const [myConversation] = (await getUserConversations(me.userId)).filter(
+      const [myConversation] = withOnlineMembers(await getUserConversations(me.userId)).filter(
         (c) => c.id === conversationId,
       );
       socket.emit("conversation:new", myConversation);
@@ -1311,7 +1316,9 @@ io.on("connection", async (socket) => {
       const ids = Array.isArray(memberIds) ? memberIds.filter((id) => id !== me.userId) : [];
       const cleanAvatarUrl = typeof avatarUrl === "string" && avatarUrl.trim() ? avatarUrl.trim() : null;
       const conversationId = await createGroupConversation(cleanName, me.userId, ids, cleanAvatarUrl);
-      const [conversation] = (await getUserConversations(me.userId)).filter((c) => c.id === conversationId);
+      const [conversation] = withOnlineMembers(await getUserConversations(me.userId)).filter(
+        (c) => c.id === conversationId,
+      );
 
       for (const memberId of [me.userId, ...ids]) {
         for (const sid of userSockets.get(memberId) || []) {
