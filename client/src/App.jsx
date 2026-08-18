@@ -134,6 +134,15 @@ function App() {
   const [typingByConv, setTypingByConv] = useState({}); // conversationId -> username | null
   const [showComposerEmoji, setShowComposerEmoji] = useState(false);
   const [showAttachPanel, setShowAttachPanel] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleText, setScheduleText] = useState("");
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("");
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
+  const [showScheduledPanel, setShowScheduledPanel] = useState(false);
+  const [scheduledMessages, setScheduledMessages] = useState([]);
+  const [scheduledLoading, setScheduledLoading] = useState(false);
   const [openReactionPickerFor, setOpenReactionPickerFor] = useState(null);
   const [openMsgMenuFor, setOpenMsgMenuFor] = useState(null);
   const [infoPanelMsgId, setInfoPanelMsgId] = useState(null);
@@ -1421,6 +1430,97 @@ function App() {
     }
     if (pendingFiles.length > 0) sendPendingFiles();
     if (text) actuallySendDraft(text);
+  }
+
+  // --- Scheduled messages: queue a text message for the active conversation to be
+  // auto-sent at a future date/time (e.g. a birthday message for 19 Aug, 12:00 AM). ---
+  function openScheduleModal() {
+    setShowAttachPanel(false);
+    setScheduleText(draft.trim());
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 5); // sensible default: 5 minutes from now
+    setScheduleDate(now.toISOString().slice(0, 10));
+    setScheduleTime(now.toTimeString().slice(0, 5));
+    setScheduleError("");
+    setShowScheduleModal(true);
+  }
+
+  async function submitScheduleMessage(e) {
+    e.preventDefault();
+    if (!activeConvId) return;
+    const text = scheduleText.trim();
+    if (!text) {
+      setScheduleError("Write the message you want sent.");
+      return;
+    }
+    if (!scheduleDate || !scheduleTime) {
+      setScheduleError("Pick a date and time.");
+      return;
+    }
+    const sendAt = new Date(`${scheduleDate}T${scheduleTime}:00`);
+    if (Number.isNaN(sendAt.getTime()) || sendAt.getTime() <= Date.now()) {
+      setScheduleError("Pick a date and time in the future.");
+      return;
+    }
+    setScheduleSaving(true);
+    setScheduleError("");
+    try {
+      const res = await fetch(`${SERVER_URL}/api/scheduled-messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tokenRef.current}`,
+        },
+        body: JSON.stringify({
+          conversationId: activeConvId,
+          text,
+          sendAt: sendAt.toISOString(),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Couldn't schedule that message.");
+      setShowScheduleModal(false);
+      setDraft("");
+      pushToast("Message scheduled", sendAt.toLocaleString());
+      if (showScheduledPanel) loadScheduledMessages();
+    } catch (err) {
+      setScheduleError(err.message);
+    } finally {
+      setScheduleSaving(false);
+    }
+  }
+
+  async function loadScheduledMessages() {
+    setScheduledLoading(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/scheduled-messages`, {
+        headers: { Authorization: `Bearer ${tokenRef.current}` },
+      });
+      if (!res.ok) return;
+      setScheduledMessages(await res.json());
+    } catch {
+      // ignore — panel just stays at whatever it last had
+    } finally {
+      setScheduledLoading(false);
+    }
+  }
+
+  function openScheduledPanel() {
+    setShowScheduledPanel(true);
+    loadScheduledMessages();
+  }
+
+  async function cancelScheduledMsg(id) {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/scheduled-messages/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tokenRef.current}` },
+      });
+      if (!res.ok) return;
+      setScheduledMessages((prev) => prev.filter((m) => m.id !== id));
+    } catch {
+      // ignore
+    }
   }
 
   // Runs `action` immediately, unless we're in message-select mode, in which
@@ -3064,6 +3164,16 @@ function App() {
                             type="button"
                             onClick={() => {
                               setShowChatMenu(false);
+                              openScheduledPanel();
+                            }}
+                          >
+                            <svg className="icon" width="15" height="15"><use href="#clock-icon" /></svg>
+                            Scheduled messages
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowChatMenu(false);
                               setShowWallpaperPicker(true);
                             }}
                           >
@@ -3622,6 +3732,20 @@ function App() {
                         <span className="attach-panel-label">Contact</span>
                         <span className="attach-panel-sub">Share contact</span>
                       </button>
+                      <button
+                        type="button"
+                        className="attach-panel-item"
+                        onClick={openScheduleModal}
+                        disabled={!activeConvId}
+                      >
+                        <span className="attach-panel-icon attach-panel-icon-schedule">
+                          <svg className="icon" width="20" height="20">
+                            <use href="#clock-icon" />
+                          </svg>
+                        </span>
+                        <span className="attach-panel-label">Schedule</span>
+                        <span className="attach-panel-sub">Send it later</span>
+                      </button>
                     </div>
                     <div
                       className={"attach-panel-dropzone" + (isDraggingFile ? " is-drag-active" : "")}
@@ -3867,6 +3991,98 @@ function App() {
             </div>
             <button type="button" className="wallpaper-modal-close" onClick={() => setShowWallpaperPicker(false)}>
               Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showScheduleModal && (
+        <div className="modal-overlay" onClick={() => setShowScheduleModal(false)}>
+          <div className="wallpaper-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="wallpaper-modal-title">Schedule message</div>
+            <form onSubmit={submitScheduleMessage} className="schedule-form">
+              <textarea
+                className="schedule-textarea"
+                placeholder="Type the message to send later…"
+                value={scheduleText}
+                onChange={(e) => setScheduleText(e.target.value)}
+                rows={3}
+                maxLength={2000}
+                autoFocus
+              />
+              <div className="schedule-form-row">
+                <label className="schedule-form-field">
+                  <span>Date</span>
+                  <input
+                    type="date"
+                    value={scheduleDate}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                  />
+                </label>
+                <label className="schedule-form-field">
+                  <span>Time</span>
+                  <input
+                    type="time"
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                  />
+                </label>
+              </div>
+              {scheduleError && <div className="schedule-form-error">{scheduleError}</div>}
+              <div className="wallpaper-modal-actions">
+                <button type="button" onClick={() => setShowScheduleModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={scheduleSaving}>
+                  {scheduleSaving ? "Scheduling…" : "Schedule"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showScheduledPanel && (
+        <div className="modal-overlay" onClick={() => setShowScheduledPanel(false)}>
+          <div className="wallpaper-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="wallpaper-modal-title">Scheduled messages</div>
+            {scheduledLoading ? (
+              <div className="schedule-empty">Loading…</div>
+            ) : scheduledMessages.length === 0 ? (
+              <div className="schedule-empty">Nothing scheduled yet.</div>
+            ) : (
+              <div className="scheduled-list">
+                {scheduledMessages.map((sm) => (
+                  <div key={sm.id} className={"scheduled-row scheduled-row-" + sm.status}>
+                    <div className="scheduled-row-main">
+                      <div className="scheduled-row-to">{sm.conversationName || "Conversation"}</div>
+                      <div className="scheduled-row-text">{sm.text}</div>
+                      <div className="scheduled-row-when">
+                        {sm.status === "pending"
+                          ? `Sends ${new Date(sm.sendAt).toLocaleString()}`
+                          : sm.status === "sent"
+                          ? `Sent ${new Date(sm.sendAt).toLocaleString()}`
+                          : sm.status === "cancelled"
+                          ? "Cancelled"
+                          : "Failed to send"}
+                      </div>
+                    </div>
+                    {sm.status === "pending" && (
+                      <button
+                        type="button"
+                        className="settings-mini-btn"
+                        onClick={() => cancelScheduledMsg(sm.id)}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button type="button" className="wallpaper-modal-close" onClick={() => setShowScheduledPanel(false)}>
+              Close
             </button>
           </div>
         </div>

@@ -6335,6 +6335,114 @@ label.modal-user-row {
   color: var(--text-muted);
   text-align: center;
 }
+
+/* ===== Schedule message modal + Scheduled messages panel ===== */
+.schedule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.schedule-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 70px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13.5px;
+  font-family: inherit;
+}
+.schedule-textarea:focus {
+  outline: none;
+  border-color: var(--signal);
+}
+.schedule-form-row {
+  display: flex;
+  gap: 10px;
+}
+.schedule-form-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.schedule-form-field input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.schedule-form-field input:focus {
+  outline: none;
+  border-color: var(--signal);
+}
+.schedule-form-error {
+  font-size: 12.5px;
+  color: #e74c3c;
+}
+.schedule-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 10px 0 4px;
+}
+.scheduled-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.scheduled-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-3);
+}
+.scheduled-row-main {
+  min-width: 0;
+  flex: 1;
+}
+.scheduled-row-to {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.scheduled-row-text {
+  font-size: 13.5px;
+  margin: 2px 0 4px;
+  word-break: break-word;
+}
+.scheduled-row-when {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.scheduled-row-sent .scheduled-row-when {
+  color: var(--success);
+}
+.scheduled-row-cancelled .scheduled-row-text,
+.scheduled-row-cancelled .scheduled-row-when {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.scheduled-row-failed .scheduled-row-when {
+  color: #e74c3c;
+}
+.attach-panel-icon-schedule {
+  background: rgba(155, 89, 182, 0.16);
+  color: #9b59b6;
+}
+
 /* ===== Image Crop Modal ===== */
 .crop-backdrop {
   position: fixed;

@@ -22,6 +22,12 @@ import {
   isConversationMember,
   getConversationMemberIds,
   addMessage,
+  createScheduledMessage,
+  listScheduledMessagesForUser,
+  cancelScheduledMessage,
+  getDueScheduledMessages,
+  markScheduledMessageSent,
+  markScheduledMessageFailed,
   getMessages,
   getMessageOwner,
   toggleMessageReaction,
@@ -677,6 +683,60 @@ app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
   }
 });
 
+// --- Scheduled messages: queue a text message to auto-send at a future date/time
+// (e.g. a birthday message for 19 Aug, 12:00 AM). A background sweep further down
+// picks up anything due and sends it through the normal message pipeline. ---
+app.post("/api/scheduled-messages", requireAuth, async (req, res) => {
+  try {
+    const { conversationId, text, sendAt } = req.body || {};
+    const cleanText = text?.toString().trim().slice(0, 2000);
+    if (!conversationId || !cleanText) {
+      return res.status(400).json({ error: "conversationId and text are required." });
+    }
+    if (!(await isConversationMember(conversationId, req.user.id))) {
+      return res.status(403).json({ error: "You're not a member of this conversation." });
+    }
+    const when = new Date(sendAt);
+    if (Number.isNaN(when.getTime())) {
+      return res.status(400).json({ error: "sendAt must be a valid date/time." });
+    }
+    // A couple of seconds of slack so "now" from a slightly-behind client clock
+    // doesn't get rejected as "in the past".
+    if (when.getTime() < Date.now() - 5000) {
+      return res.status(400).json({ error: "Scheduled time must be in the future." });
+    }
+    const row = await createScheduledMessage({
+      conversationId,
+      senderId: req.user.id,
+      text: cleanText,
+      sendAt: when,
+    });
+    res.status(201).json(row);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/scheduled-messages", requireAuth, async (req, res) => {
+  try {
+    res.json(await listScheduledMessagesForUser(req.user.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/scheduled-messages/:id", requireAuth, async (req, res) => {
+  try {
+    const cancelled = await cancelScheduledMessage(Number(req.params.id), req.user.id);
+    if (!cancelled) {
+      return res.status(404).json({ error: "Not found, already sent, or not yours." });
+    }
+    res.json({ cancelled: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Admin auth & directory (completely separate account system from chat users) ---
 app.get("/api/admin/users", requireAuth, requireAdmin, async (_req, res) => {
   try {
@@ -869,6 +929,25 @@ async function deliverIfRecipientOnline(conversationId, senderId, message) {
     console.error("deliverIfRecipientOnline failed", err.message);
     return message;
   }
+}
+
+// Shared by the live "message" socket handler and the scheduled-message sweep below:
+// saves the message, marks it delivered if a recipient is already online, pushes it to
+// the conversation room, and notifies anyone offline. `sender` needs {userId, username}.
+async function deliverMessageNow(conversationId, sender, { type = "text", text, mediaUrl, mediaName, replyToId } = {}) {
+  const saved = await addMessage({
+    conversationId,
+    userId: sender.userId,
+    type,
+    text: text || null,
+    mediaUrl: mediaUrl || null,
+    mediaName: mediaName || null,
+    replyToId: replyToId || null,
+  });
+  const delivered = await deliverIfRecipientOnline(conversationId, sender.userId, saved);
+  io.to(convRoom(conversationId)).emit("message", delivered);
+  notifyOfflineMembers(conversationId, sender, delivered);
+  return delivered;
 }
 
 // Creates the chat-log message for a freshly-placed 1:1 call and starts the
@@ -1361,18 +1440,13 @@ io.on("connection", async (socket) => {
     if (kind === "text" && !text?.toString().trim()) return;
 
     try {
-      const saved = await addMessage({
-        conversationId,
-        userId: me.userId,
+      await deliverMessageNow(conversationId, me, {
         type: kind,
         text: text ? text.toString().slice(0, 2000) : null,
         mediaUrl,
         mediaName,
-        replyToId: replyToId || null,
+        replyToId,
       });
-      const delivered = await deliverIfRecipientOnline(conversationId, me.userId, saved);
-      io.to(convRoom(conversationId)).emit("message", delivered);
-      notifyOfflineMembers(conversationId, me, delivered);
     } catch (err) {
       console.error("message failed", err.message);
     }
@@ -2101,10 +2175,45 @@ io.on("connection", async (socket) => {
   });
 });
 
+// --- Scheduled message sweep: every 20s, send anything whose time has come. ---
+// A plain interval (rather than a real cron/queue) is fine here — this is a single
+// server process, and a 20s worst-case delay is unnoticeable for "send this message
+// at/after a given date/time".
+const SCHEDULED_MESSAGE_SWEEP_MS = 20_000;
+async function sweepScheduledMessages() {
+  try {
+    const due = await getDueScheduledMessages();
+    for (const row of due) {
+      try {
+        const sender = await getUserById(row.senderId);
+        if (!sender) {
+          await markScheduledMessageFailed(row.id);
+          continue;
+        }
+        const delivered = await deliverMessageNow(
+          row.conversationId,
+          { userId: sender.id, username: sender.username },
+          { type: "text", text: row.text },
+        );
+        await markScheduledMessageSent(row.id, delivered.id);
+      } catch (err) {
+        console.error(`scheduled message ${row.id} failed to send:`, err.message);
+        await markScheduledMessageFailed(row.id).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error("sweepScheduledMessages failed:", err.message);
+  }
+}
+setInterval(sweepScheduledMessages, SCHEDULED_MESSAGE_SWEEP_MS);
+
 initDb()
   .then(() => {
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`Chat server listening on http://0.0.0.0:${PORT} (reachable on your LAN)`);
+      // Run one sweep right away too, in case something was already due while the
+      // server was down/restarting, instead of waiting up to 20s for the first tick.
+      sweepScheduledMessages();
     });
   })
   .catch((err) => {

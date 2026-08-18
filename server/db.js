@@ -316,6 +316,26 @@ export async function initDb() {
     )
   `);
 
+  // A message a user has queued to be sent automatically at a future date/time
+  // (e.g. a birthday message for 19 Aug, 12:00 AM). A background sweep in index.js
+  // picks up anything due and sends it as a normal message.
+  await query(`
+    CREATE TABLE IF NOT EXISTS scheduled_messages (
+      id SERIAL PRIMARY KEY,
+      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      text TEXT NOT NULL,
+      send_at TIMESTAMP NOT NULL,
+      status VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'cancelled', 'failed')),
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      sent_message_id INTEGER NULL REFERENCES messages(id) ON DELETE SET NULL
+    )
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS scheduled_messages_due_idx
+     ON scheduled_messages(send_at) WHERE status = 'pending'`
+  );
+
   console.log("PostgreSQL: tables ready");
 }
 
@@ -1176,6 +1196,73 @@ export async function getLatestReactionForConversation(conversationId) {
     [conversationId]
   );
   return rows[0] || null;
+}
+
+// --- Scheduled messages ---
+
+// Queues a text message to be auto-sent at `sendAt` (a JS Date, must be in the future).
+export async function createScheduledMessage({ conversationId, senderId, text, sendAt }) {
+  const [rows] = await query(
+    `INSERT INTO scheduled_messages (conversation_id, sender_id, text, send_at)
+     VALUES (?, ?, ?, ?)
+     RETURNING id, conversation_id AS "conversationId", sender_id AS "senderId", text,
+               send_at AS "sendAt", status, created_at AS "createdAt"`,
+    [conversationId, senderId, text, sendAt]
+  );
+  return rows[0];
+}
+
+// Everything a given user has queued (any conversation), newest send time last-scheduled
+// first — used to populate their "Scheduled messages" list.
+export async function listScheduledMessagesForUser(userId) {
+  const [rows] = await query(
+    `SELECT sm.id, sm.conversation_id AS "conversationId", sm.text, sm.send_at AS "sendAt",
+            sm.status, sm.created_at AS "createdAt",
+            CASE WHEN c.type = 'group' THEN c.name ELSE other.username END AS "conversationName"
+     FROM scheduled_messages sm
+     JOIN conversations c ON c.id = sm.conversation_id
+     LEFT JOIN conversation_members ocm
+       ON ocm.conversation_id = c.id AND ocm.user_id != sm.sender_id AND c.type = 'direct'
+     LEFT JOIN users other ON other.id = ocm.user_id
+     WHERE sm.sender_id = ?
+     ORDER BY sm.send_at ASC`,
+    [userId]
+  );
+  return rows;
+}
+
+// Cancels a still-pending scheduled message. Only the person who scheduled it may
+// cancel it. Returns the cancelled row, or null if it wasn't found/owned/pending.
+export async function cancelScheduledMessage(id, userId) {
+  const [rows] = await query(
+    `UPDATE scheduled_messages SET status = 'cancelled'
+     WHERE id = ? AND sender_id = ? AND status = 'pending'
+     RETURNING id`,
+    [id, userId]
+  );
+  return rows[0] || null;
+}
+
+// Everything due to go out right now — polled by the background sweep in index.js.
+export async function getDueScheduledMessages() {
+  const [rows] = await query(
+    `SELECT id, conversation_id AS "conversationId", sender_id AS "senderId", text
+     FROM scheduled_messages
+     WHERE status = 'pending' AND send_at <= CURRENT_TIMESTAMP
+     ORDER BY send_at ASC`
+  );
+  return rows;
+}
+
+export async function markScheduledMessageSent(id, sentMessageId) {
+  await query(`UPDATE scheduled_messages SET status = 'sent', sent_message_id = ? WHERE id = ?`, [
+    sentMessageId,
+    id,
+  ]);
+}
+
+export async function markScheduledMessageFailed(id) {
+  await query(`UPDATE scheduled_messages SET status = 'failed' WHERE id = ?`, [id]);
 }
 
 export async function addMessage({ conversationId, userId, type, text, mediaUrl, mediaName, replyToId }) {

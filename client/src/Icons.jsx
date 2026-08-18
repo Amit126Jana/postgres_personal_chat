@@ -441,6 +441,11 @@ export default function IconSprite() {
         <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="m1 12.5 4.5 4.5L16 6" />
         <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="m8.5 12.5 1.3 1.3L21 6" />
       </symbol>
+
+      <symbol id="clock-icon" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M12 7.5V12l3 2" />
+      </symbol>
     </svg>
   );
 }
